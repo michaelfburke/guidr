@@ -10,7 +10,7 @@
  */
 
 import { db } from "./db.js";
-import { enrichStep } from "./llm.js";
+import { enrichStep, generateFullScript } from "./llm.js";
 import { exportSession } from "./export.js";
 
 // ─── Side panel ──────────────────────────────────────────────────────────────
@@ -398,7 +398,6 @@ async function handleGenScript({ sessionId }, sendResponse) {
   }
 
   try {
-    const { generateFullScript } = await import("./llm.js");
     const script = await generateFullScript({ ...session, steps }, settings);
     sendResponse({ ok: true, script });
   } catch (err) {

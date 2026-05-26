@@ -492,7 +492,9 @@
   <div class="sh">Video walkthrough</div>
 
   <div class="video-wrap">
-    <video id="videoEl" controls style="display:none"></video>
+    <!-- Fullscreen API is disabled in Chrome side panels, so hide that
+         control rather than show a button that throws when clicked. -->
+    <video id="videoEl" controls controlsList="nofullscreen" style="display:none"></video>
     <div class="video-placeholder" id="videoPlaceholder">
       <span>Generate a video walkthrough from your guide</span>
     </div>

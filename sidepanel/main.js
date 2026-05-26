@@ -149,12 +149,21 @@ function onStepEnriched(step) {
     cap.querySelector(".capture-status").className = "capture-status ok";
     cap.querySelector(".capture-status").textContent = "done";
   }
-  // If editor is open and showing this step, refresh
+  // Enrichment only changes text fields — never the screenshot or annotations.
+  // Rebuilding the thumb strip or calling loadStepIntoEditor here would reset
+  // every <img src=""> and re-fetch screenshots from the SW, causing a visible
+  // flash + reload. Update only what actually changed.
+  const thumb = thumbStrip.querySelector(`.thumb-item[data-id="${step.id}"]`);
+  if (thumb) thumb.classList.toggle("enriched", !!step.enriched);
+
   if (document.getElementById("v-editor").classList.contains("active") &&
       steps[currentStepIdx]?.id === step.id) {
-    loadStepIntoEditor(currentStepIdx);
+    stepTitle.value = step.title || "";
+    stepBody.value  = step.body || "";
+    stepVoice.value = step.voiceoverScript || "";
+    autoResize(stepTitle); autoResize(stepBody); autoResize(stepVoice);
+    updateCharCounts();
   }
-  renderThumbStrip();
 }
 
 // ── Sessions ───────────────────────────────────────────────────────────────

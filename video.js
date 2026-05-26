@@ -23,9 +23,15 @@ const FPS           = 30;
 const FRAME_MS      = 1000 / FPS;
 
 const DEFAULTS = {
-  holdMs:           2200,   // how long each screenshot is visible
-  cursorMs:         600,    // cursor travel animation duration
-  transitionMs:     300,   // crossfade between screenshots
+  // Per-step phase timings. The sequence is:
+  //   travel → click-hold (on BEFORE) → reveal crossfade → settle (on AFTER) → inter-step
+  // This ordering ensures the click ripple plays on the pre-click screenshot,
+  // and the screen change only happens AFTER the click is shown.
+  cursorMs:        1000,    // cursor travel animation duration
+  clickHoldMs:      700,    // dwell on click point before the screen reveals
+  revealMs:         550,    // crossfade BEFORE → AFTER (the click's result)
+  settleMs:        2000,    // dwell on AFTER so viewers can read the result
+  interStepMs:      450,    // crossfade between this step's AFTER and next step's BEFORE
   showBadge:        true,   // step-number badge
   badgeColor:       "#6366f1",
   cursorColor:      "#ef4444",
@@ -81,21 +87,55 @@ async function loadFrames(steps, onProgress) {
   const out = [];
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
-    const src = step.screenshotAfter || step.screenshotBefore;
-    if (!src) continue;
+    const beforeSrc = step.screenshotBefore || step.screenshotAfter;
+    const afterSrc  = step.screenshotAfter  || step.screenshotBefore;
+    if (!beforeSrc) continue;
     try {
-      const img = await loadImage(src);
+      const before = await loadImage(beforeSrc);
+      // Reuse the bitmap if before/after point at the same data URL, or if
+      // loading the after frame fails — keeps the step renderable either way.
+      const after = afterSrc === beforeSrc
+        ? before
+        : await loadImage(afterSrc).catch(() => before);
       out.push({
         index: i,
-        bitmap: img,
-        clickX: step.target?.rect ? (step.target.rect.x + step.target.rect.width  / 2) / (img.naturalWidth  || CANVAS_WIDTH)  : 0.5,
-        clickY: step.target?.rect ? (step.target.rect.y + step.target.rect.height / 2) / (img.naturalHeight || CANVAS_HEIGHT) : 0.5,
+        before,
+        after,
+        // Click coords are normalized against the BEFORE bitmap's viewport,
+        // since that's the state the user was looking at when they clicked.
+        ...clickPoint(step, before),
         title: step.title || `Step ${i + 1}`,
       });
     } catch { /* skip unloadable */ }
     onProgress(0.1 * (i / steps.length));
   }
   return out;
+}
+
+// Returns {clickX, clickY} normalized 0–1 inside the screenshot bitmap.
+// Prefers the pre-normalized point from content_script (correct on HiDPI).
+// Falls back to rect/img-dim math for old sessions captured before that
+// field existed — this is only accurate when devicePixelRatio is 1.
+function clickPoint(step, img) {
+  const t = step.target;
+  if (t?.click && typeof t.click.x === "number") {
+    return { clickX: t.click.x, clickY: t.click.y };
+  }
+  if (t?.rect && t.viewport) {
+    return {
+      clickX: (t.rect.x + t.rect.width  / 2) / t.viewport.width,
+      clickY: (t.rect.y + t.rect.height / 2) / t.viewport.height,
+    };
+  }
+  if (t?.rect) {
+    const iw = img.naturalWidth  || CANVAS_WIDTH;
+    const ih = img.naturalHeight || CANVAS_HEIGHT;
+    return {
+      clickX: (t.rect.x + t.rect.width  / 2) / iw,
+      clickY: (t.rect.y + t.rect.height / 2) / ih,
+    };
+  }
+  return { clickX: 0.5, clickY: 0.5 };
 }
 
 function loadImage(src) {
@@ -110,57 +150,92 @@ function loadImage(src) {
 // ─── Timeline renderer ────────────────────────────────────────────────────────
 
 async function renderTimeline(ctx, frames, cfg, onProgress) {
-  const totalFrames = frames.length * (
-    msToFrames(cfg.cursorMs) + msToFrames(cfg.holdMs) + msToFrames(cfg.transitionMs)
-  );
+  const fCursor    = msToFrames(cfg.cursorMs);
+  const fClickHold = msToFrames(cfg.clickHoldMs);
+  const fReveal    = msToFrames(cfg.revealMs);
+  const fSettle    = msToFrames(cfg.settleMs);
+  const fInter     = msToFrames(cfg.interStepMs);
+  const perStep    = fCursor + fClickHold + fReveal + fSettle;
+  const totalFrames = frames.length * perStep + Math.max(0, frames.length - 1) * fInter;
   let rendered = 0;
+  const tick = () => { rendered++; onProgress(0.1 + 0.85 * (rendered / totalFrames)); };
 
-  // Start position: centre of canvas
+  // Cursor position is stored in image-normalized coordinates (0–1) and mapped
+  // through each frame's letterbox transform at draw time.
   let cursorX = 0.5;
   let cursorY = 0.5;
 
   for (let fi = 0; fi < frames.length; fi++) {
     const frame = frames[fi];
     const nextFrame = frames[fi + 1] || null;
-    const targetX = frame.clickX;
-    const targetY = frame.clickY;
 
-    // — Phase 1: animate cursor travel to click point —
-    const cursorFrames = msToFrames(cfg.cursorMs);
-    for (let t = 0; t <= cursorFrames; t++) {
-      const p = easeInOut(t / cursorFrames);
-      const cx = lerp(cursorX, targetX, p) * CANVAS_WIDTH;
-      const cy = lerp(cursorY, targetY, p) * CANVAS_HEIGHT;
-      drawScreenshot(ctx, frame.bitmap);
-      drawCursor(ctx, cx, cy, cfg, t / cursorFrames);
+    // — Phase 1: cursor travels on the BEFORE screenshot (pre-click state) —
+    for (let t = 0; t <= fCursor; t++) {
+      const p = easeInOut(t / fCursor);
+      const nx = lerp(cursorX, frame.clickX, p);
+      const ny = lerp(cursorY, frame.clickY, p);
+      clearCanvas(ctx);
+      const tr = drawScreenshot(ctx, frame.before);
+      drawCursor(ctx, tr.dx + nx * tr.dw, tr.dy + ny * tr.dh, cfg);
       if (cfg.showBadge) drawBadge(ctx, fi + 1, frame.title);
-      await nextFrame_(); rendered++;
-      onProgress(0.1 + 0.85 * (rendered / totalFrames));
+      await nextFrame_(); tick();
     }
-    cursorX = targetX;
-    cursorY = targetY;
+    cursorX = frame.clickX;
+    cursorY = frame.clickY;
 
-    // — Phase 2: click ripple + hold —
-    const holdFrames = msToFrames(cfg.holdMs);
-    for (let t = 0; t < holdFrames; t++) {
-      drawScreenshot(ctx, frame.bitmap);
-      drawCursor(ctx, cursorX * CANVAS_WIDTH, cursorY * CANVAS_HEIGHT, cfg, 1);
-      if (t < FPS * 0.4) drawRipple(ctx, cursorX * CANVAS_WIDTH, cursorY * CANVAS_HEIGHT, t, cfg);
+    // — Phase 2: click ripple + dwell, still on BEFORE so the click reads —
+    for (let t = 0; t < fClickHold; t++) {
+      clearCanvas(ctx);
+      const tr = drawScreenshot(ctx, frame.before);
+      const cx = tr.dx + cursorX * tr.dw;
+      const cy = tr.dy + cursorY * tr.dh;
+      drawCursor(ctx, cx, cy, cfg);
+      if (t < FPS * 0.5) drawRipple(ctx, cx, cy, t, cfg);
       if (cfg.showBadge) drawBadge(ctx, fi + 1, frame.title);
-      await nextFrame_(); rendered++;
-      onProgress(0.1 + 0.85 * (rendered / totalFrames));
+      await nextFrame_(); tick();
     }
 
-    // — Phase 3: crossfade to next frame —
+    // — Phase 3: reveal — crossfade BEFORE → AFTER. Cursor stays at click. —
+    for (let t = 0; t < fReveal; t++) {
+      const alpha = (t + 1) / fReveal;
+      clearCanvas(ctx);
+      const trB = drawScreenshot(ctx, frame.before);
+      ctx.globalAlpha = alpha;
+      const trA = drawScreenshot(ctx, frame.after);
+      ctx.globalAlpha = 1;
+      const lb = alpha >= 0.5 ? trA : trB;
+      drawCursor(ctx, lb.dx + cursorX * lb.dw, lb.dy + cursorY * lb.dh, cfg);
+      if (cfg.showBadge) drawBadge(ctx, fi + 1, frame.title);
+      await nextFrame_(); tick();
+    }
+
+    // — Phase 4: settle on AFTER so the viewer reads the result —
+    for (let t = 0; t < fSettle; t++) {
+      clearCanvas(ctx);
+      const tr = drawScreenshot(ctx, frame.after);
+      drawCursor(ctx, tr.dx + cursorX * tr.dw, tr.dy + cursorY * tr.dh, cfg);
+      if (cfg.showBadge) drawBadge(ctx, fi + 1, frame.title);
+      await nextFrame_(); tick();
+    }
+
+    // — Phase 5: inter-step — crossfade this step's AFTER → next step's BEFORE.
+    // Usually these are nearly identical (same viewport state); the crossfade
+    // smooths over any minor differences (e.g. fresh DOM after navigation).
     if (nextFrame) {
-      const transFrames = msToFrames(cfg.transitionMs);
-      for (let t = 0; t < transFrames; t++) {
-        const alpha = t / transFrames;
-        drawScreenshot(ctx, frame.bitmap);
+      for (let t = 0; t < fInter; t++) {
+        const alpha = (t + 1) / fInter;
+        clearCanvas(ctx);
+        const trA = drawScreenshot(ctx, frame.after);
         ctx.globalAlpha = alpha;
-        drawScreenshot(ctx, nextFrame.bitmap);
+        const trN = drawScreenshot(ctx, nextFrame.before);
         ctx.globalAlpha = 1;
-        await nextFrame_(); rendered++;
+        const useNext = alpha >= 0.5;
+        const lb = useNext ? trN : trA;
+        drawCursor(ctx, lb.dx + cursorX * lb.dw, lb.dy + cursorY * lb.dh, cfg);
+        if (cfg.showBadge) {
+          drawBadge(ctx, useNext ? fi + 2 : fi + 1, useNext ? nextFrame.title : frame.title);
+        }
+        await nextFrame_(); tick();
       }
     }
   }
@@ -168,8 +243,18 @@ async function renderTimeline(ctx, frames, cfg, onProgress) {
 
 // ─── Drawing helpers ──────────────────────────────────────────────────────────
 
+function clearCanvas(ctx) {
+  ctx.fillStyle = "#0d0d12";
+  ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+}
+
 function drawScreenshot(ctx, img) {
-  // Letterbox into canvas
+  // Letterbox into canvas. Returns the destination rect so callers can map
+  // image-normalized coordinates (e.g. the cursor's click point) into canvas
+  // pixels without double-counting the letterbox margins. The caller is
+  // responsible for clearing the canvas first — that way a crossfade can
+  // draw two screenshots in sequence without the second one repainting
+  // the background over the first at reduced alpha.
   const cw = CANVAS_WIDTH, ch = CANVAS_HEIGHT;
   const iw = img.naturalWidth  || img.width;
   const ih = img.naturalHeight || img.height;
@@ -177,16 +262,16 @@ function drawScreenshot(ctx, img) {
   const dw = iw * scale, dh = ih * scale;
   const dx = (cw - dw) / 2,  dy = (ch - dh) / 2;
 
-  ctx.fillStyle = "#0d0d12";
-  ctx.fillRect(0, 0, cw, ch);
   ctx.drawImage(img, dx, dy, dw, dh);
+  return { dx, dy, dw, dh };
 }
 
-function drawCursor(ctx, cx, cy, cfg, progress) {
-  // Outer ring (fades in)
+function drawCursor(ctx, cx, cy, cfg) {
+  // Outer halo — drawn at a constant low alpha so the cursor doesn't flicker
+  // dim→bright→dim as it transitions between motion phases.
   ctx.beginPath();
   ctx.arc(cx, cy, cfg.cursorRadius * 1.8, 0, Math.PI * 2);
-  ctx.fillStyle = `rgba(239,68,68,${0.12 * progress})`;
+  ctx.fillStyle = "rgba(239,68,68,0.18)";
   ctx.fill();
 
   // Inner dot

@@ -147,6 +147,8 @@
    */
   function describeElement(el) {
     const rect = el.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
     return {
       tag: el.tagName.toLowerCase(),
       id: el.id || null,
@@ -164,6 +166,16 @@
         y: Math.round(rect.y),
         width: Math.round(rect.width),
         height: Math.round(rect.height),
+      },
+      // Viewport at capture time — required by the video renderer to map
+      // click coordinates correctly on HiDPI displays where the screenshot
+      // is captured at viewport × devicePixelRatio.
+      viewport: { width: vw, height: vh, dpr: window.devicePixelRatio || 1 },
+      // Pre-normalized click point (0–1 in viewport space). Center of rect,
+      // clamped so off-screen elements don't push the cursor outside the frame.
+      click: {
+        x: Math.max(0, Math.min(1, (rect.x + rect.width / 2) / vw)),
+        y: Math.max(0, Math.min(1, (rect.y + rect.height / 2) / vh)),
       },
       // Nearest ancestor with a semantic role (helps LLM understand context)
       nearestLandmark: getNearestLandmark(el),
