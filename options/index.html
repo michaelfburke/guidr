@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Guidr — Settings</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg:       #09090e;
+      --s1:       #111118;
+      --s2:       #191921;
+      --border:   #23232f;
+      --border2:  #2e2e3d;
+      --accent:   #7c6af7;
+      --accent2:  #a89af9;
+      --success:  #34d399;
+      --error:    #f87171;
+      --warn:     #fbbf24;
+      --text:     #dddde8;
+      --muted:    #6b6b7e;
+      --r:        10px;
+      --font:     'Syne', system-ui, sans-serif;
+      --mono:     'JetBrains Mono', monospace;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 14px; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      line-height: 1.55;
+      min-height: 100vh;
+    }
+
+    /* ── Layout ── */
+    .shell { display: flex; min-height: 100vh; }
+    nav {
+      width: 200px;
+      flex-shrink: 0;
+      background: var(--s1);
+      border-right: 1px solid var(--border);
+      padding: 28px 16px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .brand {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      color: #fff;
+      margin-bottom: 32px;
+      padding: 0 6px;
+    }
+    .brand em { color: var(--accent); font-style: normal; }
+    nav a {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 9px 10px;
+      border-radius: 8px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.15s;
+      margin-bottom: 2px;
+    }
+    nav a:hover, nav a.active { background: var(--s2); color: var(--text); }
+    nav a.active { color: var(--accent2); }
+    nav a .ico { font-size: 15px; }
+    nav .spacer { flex: 1; }
+    nav .version { font-size: 11px; color: var(--muted); padding: 0 10px; }
+
+    main { flex: 1; padding: 40px 48px; max-width: 680px; }
+    .section-title {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+    section { margin-bottom: 40px; display: none; }
+    section.active { display: block; }
+
+    h2 { font-size: 22px; font-weight: 700; letter-spacing: -0.4px; margin-bottom: 6px; }
+    .page-desc { color: var(--muted); font-size: 13px; margin-bottom: 28px; line-height: 1.6; }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--s1);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+    }
+    .card-row {
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+    }
+    .card-row:last-child { border-bottom: none; }
+    .card-row-label {
+      min-width: 140px;
+      flex-shrink: 0;
+      padding-top: 2px;
+    }
+    .card-row-label strong { display: block; font-size: 13px; font-weight: 600; color: var(--text); }
+    .card-row-label span { font-size: 12px; color: var(--muted); line-height: 1.4; }
+    .card-row-content { flex: 1; }
+
+    /* ── Form elements ── */
+    input[type=text], input[type=password], select, textarea {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 13px;
+      padding: 9px 12px;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(124,106,247,0.12);
+    }
+    input[type=password], input.mono { font-family: var(--mono); font-size: 12px; }
+    textarea { resize: vertical; min-height: 90px; line-height: 1.6; }
+    select { cursor: pointer; }
+    .input-group { display: flex; gap: 8px; }
+    .input-group input { flex: 1; }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 16px; border-radius: 8px; border: none;
+      font-family: var(--font); font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: all 0.15s; white-space: nowrap;
+      text-decoration: none;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent2); }
+    .btn-ghost { background: var(--s2); border: 1px solid var(--border2); color: var(--text); }
+    .btn-ghost:hover { border-color: var(--accent); color: var(--accent2); }
+    .btn-danger { background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.3); color: var(--error); }
+    .btn-danger:hover { background: rgba(248,113,113,0.2); }
+    .btn-sm { padding: 5px 11px; font-size: 12px; }
+
+    /* ── Status pills ── */
+    .status { font-size: 12px; margin-top: 8px; min-height: 16px; line-height: 1; display: flex; align-items: center; gap: 5px; }
+    .status.ok   { color: var(--success); }
+    .status.err  { color: var(--error); }
+    .status.busy { color: var(--muted); }
+    .pill {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: var(--s2); border: 1px solid var(--border2);
+      border-radius: 999px; padding: 3px 10px;
+      font-size: 11px; font-weight: 500; color: var(--text);
+    }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+
+    /* ── Provider selector ── */
+    .provider-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+    .provider-card {
+      background: var(--bg);
+      border: 1.5px solid var(--border2);
+      border-radius: var(--r);
+      padding: 14px;
+      cursor: pointer;
+      transition: all 0.15s;
+      position: relative;
+    }
+    .provider-card:hover { border-color: var(--accent); }
+    .provider-card.selected { border-color: var(--accent); background: rgba(124,106,247,0.07); }
+    .provider-card input[type=radio] { position: absolute; opacity: 0; pointer-events: none; }
+    .provider-card-name { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+    .provider-card-desc { font-size: 11px; color: var(--muted); }
+    .provider-card .check {
+      position: absolute; top: 10px; right: 10px;
+      width: 16px; height: 16px; border-radius: 50%;
+      border: 1.5px solid var(--border2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 9px; color: transparent; transition: all 0.15s;
+    }
+    .provider-card.selected .check {
+      background: var(--accent); border-color: var(--accent); color: #fff;
+    }
+
+    /* ── Examples ── */
+    .examples-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+    .example-item {
+      background: var(--bg); border: 1px solid var(--border2); border-radius: 8px;
+      padding: 12px 14px; display: flex; align-items: flex-start; gap: 10px;
+    }
+    .example-item-body { flex: 1; min-width: 0; }
+    .example-item-body strong { font-size: 13px; display: block; margin-bottom: 2px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .example-item-body span { font-size: 12px; color: var(--muted); display: -webkit-box;
+      -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .example-item button { flex-shrink: 0; background: none; border: none; cursor: pointer;
+      color: var(--muted); font-size: 18px; line-height: 1; padding: 0 4px; }
+    .example-item button:hover { color: var(--error); }
+
+    /* ── Branding (color pickers) ── */
+    .color-row { display: flex; gap: 10px; align-items: center; }
+    .color-row input[type=color] {
+      width: 40px; height: 40px; padding: 0; border: 1px solid var(--border2);
+      border-radius: 8px; cursor: pointer; background: var(--bg); flex-shrink: 0;
+    }
+    .color-row input[type=color]::-webkit-color-swatch-wrapper { padding: 2px; }
+    .color-row input[type=color]::-webkit-color-swatch { border: none; border-radius: 5px; }
+    .color-row input[type=text] { max-width: 120px; }
+    #brandPreview {
+      width: 100%; max-width: 420px; background: var(--s2);
+      border-radius: 8px; border: 1px solid var(--border); display: block;
+    }
+
+    /* ── Save bar ── */
+    .save-bar {
+      position: sticky; bottom: 0;
+      background: linear-gradient(to top, var(--bg) 60%, transparent);
+      padding: 24px 0 0; margin-top: 12px;
+      display: flex; align-items: center; gap: 14px;
+    }
+    .saved-msg { color: var(--success); font-size: 12px; opacity: 0; transition: opacity 0.3s; }
+    .saved-msg.show { opacity: 1; }
+
+    /* ── Spinner ── */
+    .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(124,106,247,0.3);
+      border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Token estimator ── */
+    .token-bar { margin-top: 14px; }
+    .token-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; display: flex; justify-content: space-between; }
+    .token-track { height: 4px; background: var(--s2); border-radius: 99px; overflow: hidden; }
+    .token-fill  { height: 100%; border-radius: 99px; transition: width 0.4s, background 0.4s; }
+
+    a.link { color: var(--accent2); text-decoration: none; font-size: 12px; }
+    a.link:hover { text-decoration: underline; }
+    code { font-family: var(--mono); font-size: 11px; background: var(--s2); padding: 2px 6px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- ── Sidebar nav ── -->
+  <nav>
+    <div class="brand">Guidr<em>.</em></div>
+    <a href="#" class="active" data-section="provider">Provider</a>
+    <a href="#" data-section="tone">Tone of voice</a>
+    <a href="#" data-section="examples">Examples</a>
+    <a href="#" data-section="branding">Branding</a>
+    <a href="#" data-section="advanced">Advanced</a>
+    <div class="spacer"></div>
+    <div class="version">v0.1.0</div>
+  </nav>
+
+  <!-- ── Main ── -->
+  <main>
+
+    <!-- PROVIDER -->
+    <section id="section-provider" class="active">
+      <h2>LLM Provider</h2>
+      <p class="page-desc">Choose your AI provider and paste your API key. Keys are stored locally and never leave your browser.</p>
+
+      <div class="card">
+        <div class="card-row" style="flex-direction:column;gap:12px">
+          <div class="section-title">Select provider</div>
+          <div class="provider-grid" id="providerGrid">
+            <label class="provider-card selected" data-provider="anthropic">
+              <input type="radio" name="provider" value="anthropic" checked/>
+              <div class="check"></div>
+              <div class="provider-card-name">Anthropic</div>
+              <div class="provider-card-desc">Claude · best quality · prompt caching</div>
+            </label>
+            <label class="provider-card" data-provider="openai">
+              <input type="radio" name="provider" value="openai"/>
+              <div class="check"></div>
+              <div class="provider-card-name">OpenAI</div>
+              <div class="provider-card-desc">GPT-4o · widely supported</div>
+            </label>
+            <label class="provider-card" data-provider="gemini">
+              <input type="radio" name="provider" value="gemini"/>
+              <div class="check"></div>
+              <div class="provider-card-name">Google Gemini</div>
+              <div class="provider-card-desc">Flash · structured JSON output</div>
+            </label>
+            <label class="provider-card" data-provider="openrouter">
+              <input type="radio" name="provider" value="openrouter"/>
+              <div class="check"></div>
+              <div class="provider-card-name">OpenRouter</div>
+              <div class="provider-card-desc">100+ models · pay-per-use</div>
+            </label>
+          </div>
+        </div>
+
+        <div class="card-row">
+          <div class="card-row-label">
+            <strong>API Key</strong>
+            <span><a class="link" id="keyLink" href="#" target="_blank">Get a key</a></span>
+          </div>
+          <div class="card-row-content">
+            <div class="input-group">
+              <input type="password" id="apiKey" placeholder="Paste key here…" class="mono"/>
+              <button class="btn btn-ghost btn-sm" id="toggleKey">Show</button>
+              <button class="btn btn-ghost btn-sm" id="testKey">Test</button>
+            </div>
+            <div class="status" id="keyStatus"></div>
+          </div>
+        </div>
+
+        <div class="card-row">
+          <div class="card-row-label">
+            <strong>Model</strong>
+            <span>Used for enrichment</span>
+          </div>
+          <div class="card-row-content">
+            <select id="modelSelect"></select>
+            <div style="margin-top:6px" id="openrouterModelRow" style="display:none">
+              <input type="text" id="openrouterModel" placeholder="e.g. google/gemini-2.0-flash-001"/>
+              <div style="margin-top:4px;font-size:11px;color:var(--muted)">
+                Browse models at <a class="link" href="https://openrouter.ai/models" target="_blank">openrouter.ai/models</a>
+              </div>
+            </div>
+            <div class="token-bar">
+              <div class="token-label">
+                <span>Estimated cost / step</span>
+                <span id="costEst">—</span>
+              </div>
+              <div class="token-track"><div class="token-fill" id="costBar" style="width:0%;background:var(--success)"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="save-bar">
+        <button class="btn btn-primary" id="saveProvider">Save settings</button>
+        <span class="saved-msg" id="savedProvider">Saved</span>
+      </div>
+    </section>
+
+    <!-- TONE -->
+    <section id="section-tone">
+      <h2>Tone of voice</h2>
+      <p class="page-desc">Paste your brand voice guide here. It's injected into every AI enrichment call, so your team's writing style is applied automatically.</p>
+
+      <div class="card">
+        <div class="card-row" style="flex-direction:column;gap:10px">
+          <div class="section-title">Voice guide</div>
+          <textarea id="toneGuide" rows="8" placeholder="e.g. We write in second person ('you'), active voice. Steps start with a verb. Titles are ≤7 words. No jargon — name the actual button. End body copy with the outcome ('…to open the dashboard')."></textarea>
+          <div style="font-size:11px;color:var(--muted)">
+            Tip: copy-paste directly from your brand guidelines doc. The more specific, the better.
+          </div>
+        </div>
+        <div class="card-row" style="flex-direction:column;gap:10px">
+          <div class="section-title">Preview (what gets sent to the AI)</div>
+          <div id="promptPreview" style="font-family:var(--mono);font-size:11px;color:var(--muted);
+            background:var(--bg);border:1px solid var(--border);border-radius:8px;
+            padding:12px;line-height:1.7;white-space:pre-wrap;max-height:160px;overflow-y:auto"></div>
+        </div>
+      </div>
+
+      <div class="save-bar">
+        <button class="btn btn-primary" id="saveTone">Save</button>
+        <span class="saved-msg" id="savedTone">Saved</span>
+      </div>
+    </section>
+
+    <!-- EXAMPLES -->
+    <section id="section-examples">
+      <h2>Example steps</h2>
+      <p class="page-desc">Add up to 3 ideal step examples. These are used as few-shot prompts — the AI will match their structure and style exactly.</p>
+
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-row" style="flex-direction:column;gap:12px">
+          <ul class="examples-list" id="examplesList">
+            <li style="color:var(--muted);font-size:13px;padding:6px 0">No examples added yet.</li>
+          </ul>
+          <button class="btn btn-ghost btn-sm" id="addExampleBtn" style="align-self:flex-start">+ Add example</button>
+        </div>
+      </div>
+
+      <!-- Inline form -->
+      <div class="card" id="exampleForm" style="display:none">
+        <div class="card-row" style="flex-direction:column;gap:12px">
+          <div class="section-title">New example</div>
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;margin-bottom:5px">Title</label>
+            <input type="text" id="exTitle" placeholder="Enable two-factor authentication"/>
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;margin-bottom:5px">Body (what to do + outcome)</label>
+            <textarea id="exBody" rows="3" placeholder="Click the Security tab in Account Settings to open your security preferences."></textarea>
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;margin-bottom:5px">Voiceover script <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+            <textarea id="exVoice" rows="2" placeholder="Head over to the Security tab inside Account Settings."></textarea>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-primary btn-sm" id="saveExampleBtn">Add example</button>
+            <button class="btn btn-ghost btn-sm" id="cancelExampleBtn">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="save-bar">
+        <button class="btn btn-primary" id="saveExamples">Save examples</button>
+        <span class="saved-msg" id="savedExamples">Saved</span>
+      </div>
+    </section>
+
+    <!-- BRANDING -->
+    <section id="section-branding">
+      <h2>Branding</h2>
+      <p class="page-desc">Customize the colors of the annotations drawn over your screenshots so they match your product's brand. Changes apply to new annotations.</p>
+
+      <div class="card">
+        <div class="card-row">
+          <div class="card-row-label">
+            <strong>Circle</strong>
+            <span>Numbered callouts</span>
+          </div>
+          <div class="card-row-content">
+            <div class="color-row">
+              <input type="color" id="brandCircleColor" value="#7c6af7"/>
+              <input type="text" id="brandCircleHex" class="mono" value="#7c6af7" maxlength="7"/>
+            </div>
+          </div>
+        </div>
+        <div class="card-row">
+          <div class="card-row-label">
+            <strong>Arrow</strong>
+            <span>Pointer arrows</span>
+          </div>
+          <div class="card-row-content">
+            <div class="color-row">
+              <input type="color" id="brandArrowColor" value="#f87171"/>
+              <input type="text" id="brandArrowHex" class="mono" value="#f87171" maxlength="7"/>
+            </div>
+          </div>
+        </div>
+        <div class="card-row">
+          <div class="card-row-label">
+            <strong>Highlight box</strong>
+            <span>Rectangular highlight overlay</span>
+          </div>
+          <div class="card-row-content">
+            <div class="color-row">
+              <input type="color" id="brandHighlightColor" value="#fbbf24"/>
+              <input type="text" id="brandHighlightHex" class="mono" value="#fbbf24" maxlength="7"/>
+            </div>
+          </div>
+        </div>
+        <div class="card-row">
+          <div class="card-row-label">
+            <strong>Preview</strong>
+            <span>Live preview using current colors</span>
+          </div>
+          <div class="card-row-content">
+            <canvas id="brandPreview" width="420" height="120"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="save-bar">
+        <button class="btn btn-primary" id="saveBranding">Save</button>
+        <button class="btn btn-ghost btn-sm" id="resetBranding">Reset to defaults</button>
+        <span class="saved-msg" id="savedBranding">Saved</span>
+      </div>
+    </section>
+
+    <!-- ADVANCED -->
+    <section id="section-advanced">
+      <h2>Advanced</h2>
+      <p class="page-desc">Fine-tune screenshot compression, storage, and video defaults.</p>
+
+      <div class="card">
+        <div class="card-row">
+          <div class="card-row-label">
+            <strong>Screenshot quality</strong>
+            <span>JPEG quality sent to AI (lower = cheaper)</span>
+          </div>
+          <div class="card-row-content">
+            <div style="display:flex;align-items:center;gap:12px">
+              <input type="range" id="screenshotQuality" min="40" max="95" step="5" value="72"
+                style="flex:1;accent-color:var(--accent)"/>
+              <span id="qualityLabel" style="font-family:var(--mono);font-size:13px;color:var(--accent2);min-width:34px">72%</span>
+            </div>
+          </div>
+        </div>
+        <div class="card-row">
+          <div class="card-row-label">
+            <strong>Max image width</strong>
+            <span>Pixels, before sending to AI</span>
+          </div>
+          <div class="card-row-content">
+            <select id="maxImageWidth">
+              <option value="640">640 px — minimum tokens</option>
+              <option value="1024" selected>1024 px — recommended</option>
+              <option value="1280">1280 px — higher fidelity</option>
+              <option value="1920">1920 px — full quality</option>
+            </select>
+          </div>
+        </div>
+        <div class="card-row">
+          <div class="card-row-label">
+            <strong>Storage</strong>
+            <span>IndexedDB usage</span>
+          </div>
+          <div class="card-row-content" id="storageInfo">
+            <span style="color:var(--muted)">Calculating…</span>
+          </div>
+        </div>
+        <div class="card-row">
+          <div class="card-row-label">
+            <strong>Danger zone</strong>
+          </div>
+          <div class="card-row-content">
+            <button class="btn btn-danger btn-sm" id="clearDataBtn">Clear all Guidr data</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="save-bar">
+        <button class="btn btn-primary" id="saveAdvanced">Save</button>
+        <span class="saved-msg" id="savedAdvanced">Saved</span>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script type="module" src="main.js"></script>
+</body>
+</html>
