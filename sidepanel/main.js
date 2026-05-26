@@ -220,32 +220,39 @@ function openEditor() {
 }
 
 // ── Thumbnail strip ────────────────────────────────────────────────────────
+// Index-dependent state (badge number, dataset.idx, alt, .active) is rewritten
+// by renumberThumbs() after any reorder/delete, so handlers must resolve the
+// current index from dataset.idx at event time — not from a captured closure.
+function createThumbItem(step, i) {
+  const item = document.createElement("div");
+  item.className = `thumb-item${i === currentStepIdx ? " active" : ""}${step.enriched ? " enriched" : ""}`;
+  item.draggable = true;
+  item.dataset.idx = i;
+  item.dataset.id  = step.id;
+  item.innerHTML = `
+    <img class="thumb-img" src="" alt="Step ${i+1}"/>
+    <div class="thumb-num">${i+1}</div>
+    <button class="thumb-del" title="Delete step ${i+1}">×</button>`;
+  loadStepScreenshot(step.id, "after").then(url => {
+    if (url) item.querySelector("img").src = url;
+  });
+  setupDrag(item);
+  return item;
+}
+
+function renumberThumbs() {
+  thumbStrip.querySelectorAll(".thumb-item").forEach((item, i) => {
+    item.dataset.idx = i;
+    item.querySelector(".thumb-num").textContent = i + 1;
+    item.querySelector(".thumb-del").title = `Delete step ${i+1}`;
+    item.querySelector("img").alt = `Step ${i+1}`;
+    item.classList.toggle("active", i === currentStepIdx);
+  });
+}
+
 function renderThumbStrip() {
   thumbStrip.innerHTML = "";
-  steps.forEach((step, i) => {
-    const item = document.createElement("div");
-    item.className = `thumb-item${i === currentStepIdx ? " active" : ""}${step.enriched ? " enriched" : ""}`;
-    item.draggable = true;
-    item.dataset.idx = i;
-    item.dataset.id  = step.id;
-    item.innerHTML = `
-      <img class="thumb-img" src="" alt="Step ${i+1}"/>
-      <div class="thumb-num">${i+1}</div>
-      <button class="thumb-del" title="Delete step ${i+1}">×</button>`;
-    // Load thumbnail lazily
-    loadStepScreenshot(step.id, "after").then(url => {
-      if (url) item.querySelector("img").src = url;
-    });
-    item.addEventListener("click", () => { currentStepIdx = i; renderThumbStrip(); loadStepIntoEditor(i); });
-    item.querySelector(".thumb-del").addEventListener("click", (e) => {
-      e.stopPropagation();
-      deleteStepAt(i);
-    });
-    // Drag-to-reorder
-    setupDrag(item, i);
-    thumbStrip.appendChild(item);
-  });
-  // Add new step button
+  steps.forEach((step, i) => thumbStrip.appendChild(createThumbItem(step, i)));
   const addBtn = document.createElement("button");
   addBtn.className = "thumb-add";
   addBtn.title = "Record another step";
@@ -257,23 +264,52 @@ function renderThumbStrip() {
   thumbStrip.appendChild(addBtn);
 }
 
+// Delegated handler — survives in-place reorder/delete because it reads
+// dataset.idx at click time instead of capturing the index in a closure.
+thumbStrip.addEventListener("click", (e) => {
+  const item = e.target.closest(".thumb-item");
+  if (!item || !thumbStrip.contains(item)) return;
+  const idx = Number(item.dataset.idx);
+  if (e.target.closest(".thumb-del")) {
+    e.stopPropagation();
+    deleteStepAt(idx);
+    return;
+  }
+  currentStepIdx = idx;
+  loadStepIntoEditor(idx);
+});
+
 // ── Drag-to-reorder ────────────────────────────────────────────────────────
 let dragSrcIdx = null;
-function setupDrag(item, idx) {
-  item.addEventListener("dragstart", () => { dragSrcIdx = idx; item.style.opacity = "0.4"; });
+function setupDrag(item) {
+  item.addEventListener("dragstart", () => {
+    dragSrcIdx = Number(item.dataset.idx);
+    item.style.opacity = "0.4";
+  });
   item.addEventListener("dragend",   () => { item.style.opacity = ""; dragSrcIdx = null; });
   item.addEventListener("dragover",  (e) => { e.preventDefault(); item.classList.add("drag-over"); });
   item.addEventListener("dragleave", () => item.classList.remove("drag-over"));
   item.addEventListener("drop",      (e) => {
     e.preventDefault();
     item.classList.remove("drag-over");
-    if (dragSrcIdx === null || dragSrcIdx === idx) return;
+    const dstIdx = Number(item.dataset.idx);
+    if (dragSrcIdx === null || dragSrcIdx === dstIdx) return;
+
+    // Reorder the steps array
     const moved = steps.splice(dragSrcIdx, 1)[0];
-    steps.splice(idx, 0, moved);
-    currentStepIdx = idx;
+    steps.splice(dstIdx, 0, moved);
+    currentStepIdx = dstIdx;
+
+    // Move the DOM node in place (don't rebuild — that re-fetches every <img>).
+    // Forward drag (src < dst): src lands after dst. Backward drag: before dst.
+    const items = thumbStrip.querySelectorAll(".thumb-item");
+    const srcNode = items[dragSrcIdx];
+    if (dragSrcIdx < dstIdx) item.after(srcNode);
+    else                     item.before(srcNode);
+    renumberThumbs();
+
     const orderedIds = steps.map(s => s.id);
     sw({ type: "SP_REORDER_STEPS", sessionId: currentSessionId, orderedIds });
-    renderThumbStrip();
     loadStepIntoEditor(currentStepIdx);
   });
 }
@@ -351,8 +387,8 @@ async function saveCurrentStep() {
 }
 
 // Step navigation
-prevBtn.addEventListener("click", () => { if (currentStepIdx > 0) { currentStepIdx--; renderThumbStrip(); loadStepIntoEditor(currentStepIdx); } });
-nextBtn.addEventListener("click", () => { if (currentStepIdx < steps.length-1) { currentStepIdx++; renderThumbStrip(); loadStepIntoEditor(currentStepIdx); } });
+prevBtn.addEventListener("click", () => { if (currentStepIdx > 0) { currentStepIdx--; loadStepIntoEditor(currentStepIdx); } });
+nextBtn.addEventListener("click", () => { if (currentStepIdx < steps.length-1) { currentStepIdx++; loadStepIntoEditor(currentStepIdx); } });
 
 // Keyboard shortcuts
 document.addEventListener("keydown", (e) => {
@@ -408,6 +444,10 @@ async function deleteStepAt(idx) {
   const res = await sw({ type: "SP_DELETE_STEP", stepId: step.id, sessionId: currentSessionId });
   if (!res?.ok) { errorToast("Could not delete step"); return; }
   steps.splice(idx, 1);
+  // Remove just the affected thumb node so the surrounding thumbs keep
+  // their <img> intact and don't re-fetch screenshots.
+  const node = thumbStrip.querySelector(`.thumb-item[data-id="${step.id}"]`);
+  if (node) node.remove();
   if (!steps.length) {
     toast("Step deleted — no steps remain");
     showView("v-home");
@@ -416,7 +456,7 @@ async function deleteStepAt(idx) {
   }
   if (currentStepIdx >= steps.length) currentStepIdx = steps.length - 1;
   else if (idx < currentStepIdx) currentStepIdx--;
-  renderThumbStrip();
+  renumberThumbs();
   loadStepIntoEditor(currentStepIdx);
   toast("Step deleted");
 }
