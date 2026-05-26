@@ -3,7 +3,7 @@
 Free, open-source Chrome extension for customer success teams.
 Click through any SaaS product → get step-by-step guides with AI-generated text, screenshots, and voiceover scripts.
 
-**Bring your own API key. Nothing leaves your browser.**
+**Bring your own API key. Nothing leaves your browser except the calls you make to your chosen LLM provider.** See [PRIVACY.md](PRIVACY.md) for details.
 
 ---
 
@@ -12,9 +12,9 @@ Click through any SaaS product → get step-by-step guides with AI-generated tex
 ```
 guidr-extension/
 ├── manifest.json          MV3 manifest
-├── content_script.js      Injected into pages — captures clicks + DOM context
+├── content_script.js      Injected on demand by the SW during recording — captures clicks + DOM context
 ├── service_worker.js      Background SW — orchestrates capture, LLM, storage
-├── llm.js                 LLM enrichment (Anthropic + OpenAI)
+├── llm.js                 LLM enrichment (Anthropic, OpenAI, Gemini, OpenRouter)
 ├── db.js                  IndexedDB wrapper (sessions + steps with screenshots)
 ├── export.js              Export to Markdown, HTML, Intercom JSON, raw JSON
 ├── sidepanel/
@@ -30,8 +30,9 @@ guidr-extension/
 1. `chrome://extensions` → enable **Developer mode**
 2. Click **Load unpacked** → select this folder
 3. Click the Guidr icon → opens side panel
-4. Go to ⚙️ Settings → paste your Anthropic or OpenAI API key → Save
+4. Go to ⚙️ Settings → choose an LLM provider, paste your API key → Save
 5. Navigate to any SaaS app, name your guide, hit **Start recording**
+   - First time only: Chrome will prompt for access to all sites. This is what lets Guidr screenshot the tab during recording. You can revoke it at any time from `chrome://extensions`.
 6. Click through the feature you want to document
 7. Hit **Stop recording** → **✦ Enrich all** to generate text
 8. Export as Markdown, HTML, or Intercom JSON
@@ -40,12 +41,16 @@ guidr-extension/
 
 ## LLM providers
 
-| Provider | Model used | Notes |
-|---|---|---|
-| Anthropic (recommended) | claude-opus-4-6 | Best multimodal quality; get key at console.anthropic.com |
-| OpenAI | gpt-4o | Good alternative; get key at platform.openai.com |
+Guidr supports four providers. Bring your own API key for whichever you prefer:
 
-Cost per guide: roughly $0.05–0.20 depending on screenshot count and provider.
+| Provider | Get a key |
+|---|---|
+| Anthropic | <https://console.anthropic.com/settings/keys> |
+| OpenAI | <https://platform.openai.com/api-keys> |
+| Google Gemini | <https://aistudio.google.com/apikey> |
+| OpenRouter | <https://openrouter.ai/keys> |
+
+Pick the provider and model in ⚙️ Settings. Cost per guide varies by provider, model, and screenshot count — typically a few cents to a few tens of cents.
 
 ---
 
