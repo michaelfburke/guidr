@@ -93,6 +93,14 @@ async function handleStartRecording({ sessionName }, sendResponse) {
     return;
   }
 
+  // Optional host permission — request the first time the user records.
+  // Persists across sessions; the user can revoke from chrome://extensions.
+  const granted = await chrome.permissions.request({ origins: ["<all_urls>"] });
+  if (!granted) {
+    sendResponse({ ok: false, error: "Guidr needs permission to record on this site. Grant access and try again." });
+    return;
+  }
+
   // Hold the session in memory only — it's persisted on first step capture
   // so that aborted starts (no content script, user cancels) don't leave
   // empty zombie sessions in the recent-guides list.
@@ -101,20 +109,42 @@ async function handleStartRecording({ sessionName }, sendResponse) {
   activeSession = { id: sessionId, tabId: tab.id, name: uniqueName, steps: [] };
 
   try {
+    await injectContentScript(tab.id);
     await chrome.tabs.sendMessage(tab.id, { type: "GUIDR_START_RECORDING" });
-  } catch {
+  } catch (err) {
     activeSession = null;
-    sendResponse({ ok: false, error: "Refresh the page once after installing Guidr, then try again." });
+    sendResponse({ ok: false, error: `Couldn't start recording on this tab: ${err.message}` });
     return;
   }
   sendResponse({ ok: true, sessionId });
 }
 
+async function injectContentScript(tabId) {
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ["content_script.js"],
+  });
+}
+
+// While recording, re-inject the content script after navigations so the
+// recording survives full-page loads. The content script's __guidrInjected
+// guard makes re-injection idempotent.
+chrome.tabs.onUpdated.addListener(async (tabId, info) => {
+  if (!activeSession || activeSession.tabId !== tabId) return;
+  if (info.status !== "complete") return;
+  try {
+    await injectContentScript(tabId);
+    await chrome.tabs.sendMessage(tabId, { type: "GUIDR_START_RECORDING" });
+  } catch {
+    // chrome://, restricted pages, or origin without host permission — ignore.
+  }
+});
+
 async function handleStopRecording(_msg, sendResponse) {
   if (!activeSession) { sendResponse({ ok: false, error: "No active session" }); return; }
 
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  await chrome.tabs.sendMessage(tab.id, { type: "GUIDR_STOP_RECORDING" }).catch(() => {});
+  // Send to the recording tab specifically — the user may have switched tabs.
+  await chrome.tabs.sendMessage(activeSession.tabId, { type: "GUIDR_STOP_RECORDING" }).catch(() => {});
 
   const session = { ...activeSession };
   activeSession = null;

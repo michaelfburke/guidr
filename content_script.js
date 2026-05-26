@@ -1,7 +1,14 @@
 /**
  * content_script.js
- * Injected into every page. Captures user interactions and DOM context.
- * Sends events to service_worker.js via chrome.runtime.sendMessage.
+ * Injected on demand by the service worker when the user starts recording
+ * (chrome.scripting.executeScript) and re-injected after navigations within
+ * the recording tab. Not injected at install time or on page loads — the
+ * extension declares no static content_scripts. Captures user interactions
+ * and DOM context, sends events to service_worker.js via chrome.runtime.sendMessage.
+ *
+ * On load this file is inert: it only registers a message listener and the
+ * __guidrInjected dedupe flag. Click/keydown listeners are attached only
+ * once GUIDR_START_RECORDING arrives from the service worker.
  *
  * Captured per step:
  *  - screenshot (requested from service worker via tabs.captureVisibleTab)

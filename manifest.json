@@ -3,16 +3,19 @@
   "name": "Guidr – AI Guide Maker",
   "version": "0.1.0",
   "description": "Click through any SaaS product and generate polished step-by-step guides with AI.",
+  "author": "Michael Burke",
+  "homepage_url": "https://github.com/michaelfburke/guidr",
 
   "permissions": [
     "activeTab",
+    "scripting",
     "storage",
     "sidePanel",
     "tabs",
     "downloads"
   ],
 
-  "host_permissions": [
+  "optional_host_permissions": [
     "<all_urls>"
   ],
 
@@ -20,15 +23,6 @@
     "service_worker": "service_worker.js",
     "type": "module"
   },
-
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["content_script.js"],
-      "run_at": "document_idle",
-      "all_frames": false
-    }
-  ],
 
   "side_panel": {
     "default_path": "sidepanel/index.html"

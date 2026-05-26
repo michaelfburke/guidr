@@ -145,8 +145,10 @@ function exportIntercom(session) {
     body: bodyHtml.trim(),
     state: "draft", // "published" to go live immediately
     parent_type: "collection", // or "section"
-    parent_id: null, // TODO: user fills in their collection ID
-    author_id: null, // TODO: user fills in their Intercom admin ID
+    // The two nulls below are placeholders the end user fills in before POSTing
+    // to the Intercom Articles API. See README → "Intercom Article JSON".
+    parent_id: null,
+    author_id: null,
     // Intercom-specific metadata
     _guidr_meta: {
       exportedAt: new Date().toISOString(),
