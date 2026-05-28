@@ -5,11 +5,11 @@
  * Supported formats:
  *  - "markdown"  → .md file, screenshots embedded as base64 or saved to a zip
  *  - "html"      → self-contained .html with inline screenshots
- *  - "intercom"  → Intercom Help Center Article JSON (ready for Articles API)
+ *  - "intercom"  → allowlist HTML for paste into the Intercom article editor
  *  - "json"      → Raw session JSON (for backup / import)
  *
- * Each format returns { filename, mimeType, content } where content is a string.
- * The service worker triggers a chrome.downloads.download for the user.
+ * Each format returns { filename, mimeType, content } and may set `clipboard: true`
+ * to signal that the side panel should copy the content instead of triggering a download.
  */
 
 import { db } from "./db.js";
@@ -118,49 +118,41 @@ function exportHtml(session) {
   };
 }
 
-// ─── Intercom Articles API ────────────────────────────────────────────────────
+// ─── Intercom (paste into article editor) ─────────────────────────────────────
 /**
- * Intercom Help Center Articles accept HTML body content via their REST API.
- * https://developers.intercom.com/docs/references/rest-api/api.intercom.io/Articles/article/
+ * Produces HTML the user can paste directly into Intercom's article editor.
+ * The editor accepts pasted rich HTML, including data: image URLs, and uploads
+ * inline images to Intercom's CDN on save — so the user doesn't have to manage
+ * image hosting separately.
  *
- * This export produces JSON you paste into a POST /articles request,
- * or can wire up directly with an Intercom API key in the options page.
- *
- * Notes:
- *  - Intercom doesn't support embedded base64 images in article HTML.
- *    Screenshots are omitted from the body — add image hosting in v2.
- *  - The `author_id` field must be filled by the user (their Intercom admin ID).
+ * Only tags on Intercom's allowlist are emitted:
+ * https://developers.intercom.com/docs/guides/help-center/supported-html
  */
 function exportIntercom(session) {
-  const bodyHtml = session.steps
-    .map(
-      (step, i) => `
-<h2>${i + 1}. ${escHtml(step.title || "Untitled step")}</h2>
-<p>${escHtml(step.body || "")}</p>`
-    )
-    .join("\n");
+  const parts = [];
 
-  const article = {
-    title: session.name,
-    body: bodyHtml.trim(),
-    state: "draft", // "published" to go live immediately
-    parent_type: "collection", // or "section"
-    // The two nulls below are placeholders the end user fills in before POSTing
-    // to the Intercom Articles API. See README → "Intercom Article JSON".
-    parent_id: null,
-    author_id: null,
-    // Intercom-specific metadata
-    _guidr_meta: {
-      exportedAt: new Date().toISOString(),
-      sessionId: session.id,
-      stepCount: session.steps.length,
-    },
-  };
+  for (const [i, step] of session.steps.entries()) {
+    parts.push(`<h2>${i + 1}. ${escHtml(step.title || "Untitled step")}</h2>`);
+
+    if (step.body) {
+      const paragraphs = step.body.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
+      for (const p of paragraphs) {
+        parts.push(`<p>${escHtml(p).replace(/\n/g, "<br>")}</p>`);
+      }
+    }
+
+    const img = step.screenshotAfter || step.screenshotBefore;
+    if (img) {
+      const alt = escHtml(step.title || `Step ${i + 1} screenshot`);
+      parts.push(`<p><img src="${img}" alt="${alt}"/></p>`);
+    }
+  }
 
   return {
-    filename: `${slugify(session.name)}-intercom.json`,
-    mimeType: "application/json",
-    content: JSON.stringify(article, null, 2),
+    filename: `${slugify(session.name)}-intercom.html`,
+    mimeType: "text/html",
+    content: parts.join("\n"),
+    clipboard: true,
   };
 }
 

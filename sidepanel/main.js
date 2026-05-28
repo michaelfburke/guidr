@@ -90,11 +90,13 @@ chrome.runtime.onMessage.addListener((msg) => {
 $("btn-home").addEventListener("click", () => showView("v-home"));
 $("btn-options").addEventListener("click", () => chrome.runtime.openOptionsPage());
 $("btn-video").addEventListener("click", () => showView("v-video"));
+$("btn-editor").addEventListener("click", () => showView("v-editor"));
 
 function showView(id) {
   document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
   $(id).classList.add("active");
-  $("btn-video").style.display = (id === "v-editor" && steps.length > 0) ? "" : "none";
+  $("btn-video").style.display  = (id === "v-editor" && steps.length > 0) ? "" : "none";
+  $("btn-editor").style.display = (id === "v-video"  && steps.length > 0) ? "" : "none";
 }
 
 // ── Recording ──────────────────────────────────────────────────────────────
@@ -679,6 +681,9 @@ $("generateVideoBtn").addEventListener("click", async () => {
     $("videoEl").style.display = "";
     $("videoPlaceholder").style.display = "none";
     $("downloadVideoBtn").style.display = "";
+    // Scroll the video-wrap into view so the finished render isn't half-hidden
+    // when the user clicked "Generate" from further down the panel.
+    $("v-video").scrollTop = 0;
     toast("Video ready");
   } catch(err) {
     toast("Video error: " + err.message);
@@ -719,6 +724,21 @@ exportBtn.addEventListener("click", async () => {
   exportBtn.textContent = "Export";
   exportBtn.disabled = false;
   if (!res?.ok) { errorToast("Export failed: " + formatApiError(res?.error)); return; }
+
+  if (res.clipboard) {
+    try {
+      const htmlBlob = new Blob([res.content], { type: "text/html" });
+      const textBlob = new Blob([res.content], { type: "text/plain" });
+      await navigator.clipboard.write([
+        new ClipboardItem({ "text/html": htmlBlob, "text/plain": textBlob })
+      ]);
+      toast("Copied — paste into your Intercom article editor");
+    } catch (e) {
+      errorToast("Clipboard write failed: " + e.message);
+    }
+    return;
+  }
+
   const blob = new Blob([res.content], { type: res.mimeType });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");

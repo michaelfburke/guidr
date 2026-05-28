@@ -81,16 +81,16 @@ For large guides, consider the HTML export instead (same content, nicer renderin
 ### HTML
 Self-contained single file. Open in any browser. Good for sharing via email or Notion embed.
 
-### Intercom Article JSON
-Ready for the [Intercom Articles API](https://developers.intercom.com/docs/references/rest-api/api.intercom.io/Articles/article/).
-Fill in `author_id` and `parent_id` (your collection), then POST to:
-```
-POST https://api.intercom.io/articles
-Authorization: Bearer YOUR_INTERCOM_TOKEN
-Content-Type: application/json
-```
-Screenshots in Intercom articles require image hosting (Intercom doesn't accept base64).
-Upload screenshots to S3/Cloudinary and replace the `<img>` srcs before posting. This is a v2 feature.
+### Copy for Intercom
+Copies the guide as [allowlist HTML](https://developers.intercom.com/docs/guides/help-center/supported-html)
+to the clipboard, with screenshots inlined as base64 `<img>` tags.
+
+To use it:
+1. Pick **Copy for Intercom** in the export bar and click **Export**.
+2. In Intercom, create a new article and click into the body.
+3. Paste. The editor uploads the inline images to Intercom's CDN on save.
+
+No API token, no `author_id`, no JSON to edit.
 
 ### Raw JSON
 Full session backup including all metadata (no screenshots). Use to import into another browser or for debugging.
