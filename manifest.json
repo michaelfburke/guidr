@@ -12,7 +12,8 @@
     "storage",
     "sidePanel",
     "tabs",
-    "downloads"
+    "downloads",
+    "desktopCapture"
   ],
 
   "optional_host_permissions": [

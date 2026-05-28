@@ -1,34 +1,27 @@
 /**
  * export.js
- * Converts a session (with enriched steps + screenshots) into various export formats.
+ * Converts a session (with steps already hydrated by the caller) into
+ * downloadable artefacts.
+ *
+ * Steps are expected to carry `screenshotAfter` if the caller wants an
+ * image embedded for that step — the side panel extracts those frames from
+ * the source video before calling here (mediaMode "screenshot"), or passes
+ * null (mediaMode "none"). Steps with `included === false` should be
+ * filtered out by the caller; only included steps reach this module.
  *
  * Supported formats:
- *  - "markdown"  → .md file, screenshots embedded as base64 or saved to a zip
+ *  - "markdown"  → .md file, screenshots embedded as base64
  *  - "html"      → self-contained .html with inline screenshots
  *  - "intercom"  → allowlist HTML for paste into the Intercom article editor
- *  - "json"      → Raw session JSON (for backup / import)
- *
- * Each format returns { filename, mimeType, content } and may set `clipboard: true`
- * to signal that the side panel should copy the content instead of triggering a download.
+ *  - "json"      → raw session JSON (no media blobs)
  */
 
-import { db } from "./db.js";
-
 export async function exportSession(session, format) {
-  // Hydrate steps with screenshots for export
-  const steps = await Promise.all(
-    session.steps.map(async (step) => {
-      const full = await db.getStep(step.id);
-      return full || step;
-    })
-  );
-  const hydratedSession = { ...session, steps };
-
   switch (format) {
-    case "markdown":  return exportMarkdown(hydratedSession);
-    case "html":      return exportHtml(hydratedSession);
-    case "intercom":  return exportIntercom(hydratedSession);
-    case "json":      return exportJson(hydratedSession);
+    case "markdown":  return exportMarkdown(session);
+    case "html":      return exportHtml(session);
+    case "intercom":  return exportIntercom(session);
+    case "json":      return exportJson(session);
     default:          throw new Error(`Unknown format: ${format}`);
   }
 }

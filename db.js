@@ -2,33 +2,44 @@
  * db.js
  * Thin IndexedDB wrapper.
  *
- * Schema:
- *   sessions  — { id, name, tabId, steps: [stepId], createdAt, updatedAt }
- *   steps     — { id, sessionId, index, target, url, pageTitle, timestamp,
- *                 screenshotBefore, screenshotAfter, title, body,
- *                 voiceoverScript, enriched, enrichError }
+ * Schema (v2):
+ *   sessions   — { id, name, tabId, steps: [stepId], createdAt, updatedAt,
+ *                  hasRecording, recordingBytes, recordingDurationMs }
+ *   steps      — { id, sessionId, index, tsMs, target, url, pageTitle,
+ *                  title, body, voiceoverScript, included, mediaMode,
+ *                  annotations, enriched, enrichError }
+ *   recordings — { id (= sessionId), blob, mimeType, durationMs, byteSize, createdAt }
  *
- * chrome.storage.local is limited to ~10MB so we use IndexedDB for blobs.
- * Sessions metadata (no screenshots) is also mirrored to chrome.storage.local
- * for fast listing without opening IDB.
+ * Sessions metadata (no blobs) is mirrored to chrome.storage.local for fast
+ * listing without opening IDB.
+ *
+ * Upgrading from v1 wipes all prior data — the capture model has changed
+ * (no more before/after screenshots; the source of truth is now a video
+ * recording per session), so v1 records can't be played in the new UI.
  */
 
 const DB_NAME = "guidr";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 function openDB() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = (e) => {
       const db = e.target.result;
-      if (!db.objectStoreNames.contains("sessions")) {
-        const ss = db.createObjectStore("sessions", { keyPath: "id" });
-        ss.createIndex("createdAt", "createdAt");
-      }
-      if (!db.objectStoreNames.contains("steps")) {
-        const st = db.createObjectStore("steps", { keyPath: "id" });
-        st.createIndex("sessionId", "sessionId");
-      }
+      // Drop any pre-existing stores (v1 had screenshots inside steps).
+      for (const name of [...db.objectStoreNames]) db.deleteObjectStore(name);
+
+      const ss = db.createObjectStore("sessions", { keyPath: "id" });
+      ss.createIndex("createdAt", "createdAt");
+
+      const st = db.createObjectStore("steps", { keyPath: "id" });
+      st.createIndex("sessionId", "sessionId");
+
+      db.createObjectStore("recordings", { keyPath: "id" });
+
+      // Clear the chrome.storage.local mirror so the home view doesn't show
+      // dangling references to v1 sessions that no longer exist in IDB.
+      chrome.storage.local.remove("guidr_sessions").catch(() => {});
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -56,26 +67,19 @@ async function txAll(storeName, mode, fn) {
   });
 }
 
-// ─── Sessions ─────────────────────────────────────────────────────────────────
-
 export const db = {
+  // ─── Sessions ────────────────────────────────────────────────────────────
+
   async saveSession(session) {
     const now = Date.now();
     const toSave = {
       ...session,
-      steps: session.steps?.map((s) => s.id || s) ?? [], // store only IDs
+      steps: session.steps?.map((s) => s.id || s) ?? [],
       createdAt: session.createdAt || now,
       updatedAt: now,
     };
     await tx("sessions", "readwrite", (store) => store.put(toSave));
-    // Mirror lightweight metadata to chrome.storage for fast listing
-    const meta = await chrome.storage.local.get("guidr_sessions");
-    const list = meta.guidr_sessions || [];
-    const idx = list.findIndex((s) => s.id === session.id);
-    const entry = { id: toSave.id, name: toSave.name, stepCount: toSave.steps.length, updatedAt: now };
-    if (idx === -1) list.unshift(entry);
-    else list[idx] = entry;
-    await chrome.storage.local.set({ guidr_sessions: list.slice(0, 200) }); // cap at 200
+    await mirrorSession(toSave);
   },
 
   async getSession(id) {
@@ -83,23 +87,21 @@ export const db = {
   },
 
   async getAllSessions() {
-    // Return lightweight list from chrome.storage
     const meta = await chrome.storage.local.get("guidr_sessions");
     return meta.guidr_sessions || [];
   },
 
   async deleteSession(id) {
     await tx("sessions", "readwrite", (store) => store.delete(id));
-    // Delete all steps
     const steps = await this.getStepsForSession(id);
     for (const step of steps) await this.deleteStep(step.id);
-    // Update mirror
+    await this.deleteRecording(id);
     const meta = await chrome.storage.local.get("guidr_sessions");
     const list = (meta.guidr_sessions || []).filter((s) => s.id !== id);
     await chrome.storage.local.set({ guidr_sessions: list });
   },
 
-  // ─── Steps ──────────────────────────────────────────────────────────────────
+  // ─── Steps ──────────────────────────────────────────────────────────────
 
   async saveStep(step) {
     await tx("steps", "readwrite", (store) => store.put(step));
@@ -126,17 +128,46 @@ export const db = {
     await tx("steps", "readwrite", (store) => store.delete(id));
   },
 
-  // ─── Screenshot retrieval (large blobs, called on demand) ───────────────────
+  // ─── Recordings (per-session webm blob) ─────────────────────────────────
 
-  async getScreenshot(stepId, which = "after") {
-    const step = await this.getStep(stepId);
-    if (!step) return null;
-    return which === "before" ? step.screenshotBefore : step.screenshotAfter;
+  async saveRecording({ sessionId, blob, mimeType, durationMs }) {
+    const record = {
+      id: sessionId,
+      blob,
+      mimeType,
+      durationMs,
+      byteSize: blob.size,
+      createdAt: Date.now(),
+    };
+    await tx("recordings", "readwrite", (store) => store.put(record));
+    // Update session metadata + mirror so the home view can show size badges.
+    const session = await this.getSession(sessionId);
+    if (session) {
+      session.hasRecording = true;
+      session.recordingBytes = blob.size;
+      session.recordingDurationMs = durationMs;
+      await this.saveSession(session);
+    }
+    return record;
   },
 
-  // ─── Housekeeping ────────────────────────────────────────────────────────────
+  async getRecording(sessionId) {
+    return tx("recordings", "readonly", (store) => store.get(sessionId));
+  },
 
-  /** Estimate total IndexedDB size (rough) */
+  async deleteRecording(sessionId) {
+    await tx("recordings", "readwrite", (store) => store.delete(sessionId));
+    const session = await this.getSession(sessionId);
+    if (session && session.hasRecording) {
+      session.hasRecording = false;
+      session.recordingBytes = 0;
+      session.recordingDurationMs = 0;
+      await this.saveSession(session);
+    }
+  },
+
+  // ─── Housekeeping ───────────────────────────────────────────────────────
+
   async estimateSize() {
     if (navigator.storage?.estimate) {
       const est = await navigator.storage.estimate();
@@ -144,15 +175,24 @@ export const db = {
     }
     return null;
   },
-
-  /** Delete sessions older than maxAgeDays that have been exported */
-  async pruneOldSessions(maxAgeDays = 30) {
-    const sessions = await this.getAllSessions();
-    const cutoff = Date.now() - maxAgeDays * 86400 * 1000;
-    for (const s of sessions) {
-      if (s.updatedAt < cutoff && s.exported) {
-        await this.deleteSession(s.id);
-      }
-    }
-  },
 };
+
+// ─── Internal helpers ─────────────────────────────────────────────────────
+
+async function mirrorSession(session) {
+  const meta = await chrome.storage.local.get("guidr_sessions");
+  const list = meta.guidr_sessions || [];
+  const idx = list.findIndex((s) => s.id === session.id);
+  const entry = {
+    id: session.id,
+    name: session.name,
+    stepCount: session.steps.length,
+    updatedAt: session.updatedAt,
+    hasRecording: !!session.hasRecording,
+    recordingBytes: session.recordingBytes || 0,
+    recordingDurationMs: session.recordingDurationMs || 0,
+  };
+  if (idx === -1) list.unshift(entry);
+  else list[idx] = entry;
+  await chrome.storage.local.set({ guidr_sessions: list.slice(0, 200) });
+}

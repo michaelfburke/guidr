@@ -1,45 +1,23 @@
-import { synthesizeVideo } from '../video.js';
+import { exportSession } from "../export.js";
+import { db } from "../db.js";
 
 // ── State ──────────────────────────────────────────────────────────────────
 let isRecording = false;
 let currentSessionId = null;
-let steps = []; // lightweight, no blob screenshots
+let currentSession = null;
+let steps = [];
 let currentStepIdx = 0;
-let currentShotDataUrl = null;
+let recordingObjectUrl = null;
+let extractorObjectUrl = null;
 
-// Annotation state
-let annotations = []; // per-step: stored as JSON in step.annotations
-let annoMode = false;
-let activeTool = "circle";
-let isDragging = false;
-let dragStart = null;
-let pendingAnnotation = null;
-let selectedAnnoId = null;
-
-// Video state
-let videoBlob = null;
-let videoObjectUrl = null;
-
-// Branding (annotation colors) — defaults match the previous hardcoded values.
-const BRAND_DEFAULTS = {
-  brandCircleColor:    "#7c6af7",
-  brandArrowColor:     "#f87171",
-  brandHighlightColor: "#fbbf24",
-};
-let branding = { ...BRAND_DEFAULTS };
-chrome.storage.local.get(Object.keys(BRAND_DEFAULTS), (data) => {
-  Object.keys(BRAND_DEFAULTS).forEach((k) => {
-    if (data[k]) branding[k] = data[k];
-  });
-});
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== "local") return;
-  let touched = false;
-  Object.keys(BRAND_DEFAULTS).forEach((k) => {
-    if (changes[k]) { branding[k] = changes[k].newValue || BRAND_DEFAULTS[k]; touched = true; }
-  });
-  if (touched && typeof renderAnnotations === "function") renderAnnotations();
-});
+// Active MediaRecorder state — lives in the side panel because desktopCapture
+// streamIds are bound to the renderer that called chooseDesktopMedia. The
+// offscreen doc can't consume them; the side panel can.
+let mediaRecorder = null;
+let mediaStream = null;
+let mediaChunks = [];
+let recordingStartedAt = 0;
+let recordingMimeType = "";
 
 // ── DOM refs ───────────────────────────────────────────────────────────────
 const recBtn       = $("recBtn");
@@ -49,10 +27,12 @@ const sessionName  = $("sessionName");
 const captureSection = $("captureSection");
 const captureList  = $("captureList");
 const sessionsList = $("sessionsList");
-const mainShot     = $("mainShot");
-const annoCanvas   = $("annoCanvas");
-const annoCtx      = annoCanvas.getContext("2d");
-const thumbStrip   = $("thumbStrip");
+const srcVideo     = $("srcVideo");
+const videoEmpty   = $("videoEmpty");
+const chapterRail  = $("chapterRail");
+const stepInclude  = $("stepInclude");
+const stepMedia    = $("stepMedia");
+const stepTs       = $("stepTs");
 const stepTitle    = $("stepTitle");
 const stepBody     = $("stepBody");
 const stepVoice    = $("stepVoice");
@@ -61,17 +41,30 @@ const prevBtn      = $("prevBtn");
 const nextBtn      = $("nextBtn");
 const exportBtn    = $("exportBtn");
 const exportFmt    = $("exportFmt");
+const extractor    = $("extractor");
+const extractorCanvas = $("extractorCanvas");
 
 // ── Boot ───────────────────────────────────────────────────────────────────
 loadSessions();
 applyOnboardingState();
+
+// If the user accidentally closes the side panel mid-recording, kill the
+// stream cleanly so the OS doesn't keep capturing in the background.
+window.addEventListener("beforeunload", () => {
+  if (mediaRecorder && mediaRecorder.state !== "inactive") {
+    try { mediaRecorder.stop(); } catch {}
+  }
+  if (mediaStream) {
+    try { mediaStream.getTracks().forEach(t => t.stop()); } catch {}
+  }
+});
 
 async function applyOnboardingState() {
   const { apiKey } = await chrome.storage.local.get("apiKey");
   const hasKey = !!apiKey;
   $("setupCard").style.display = hasKey ? "none" : "";
   $("nameRow").style.display   = hasKey ? "" : "none";
-  $("recBtn").style.display    = hasKey ? "" : "none";
+  recBtn.style.display         = hasKey ? "" : "none";
 }
 
 $("goSetupBtn").addEventListener("click", () => chrome.runtime.openOptionsPage());
@@ -81,44 +74,174 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.type === "SW_STEP_CAPTURED")  onStepCaptured(msg.payload.step);
-  if (msg.type === "SW_STEP_ENRICHED")  onStepEnriched(msg.payload.step);
-  if (msg.type === "SW_CAPTURE_ERROR")  errorToast("Capture failed: " + formatApiError(msg.payload.message));
+  if (msg.type === "SW_STEP_CAPTURED") onStepCaptured(msg.payload.step);
+  if (msg.type === "SW_STEP_ENRICHED") onStepEnriched(msg.payload.step);
 });
 
 // ── Navigation ─────────────────────────────────────────────────────────────
 $("btn-home").addEventListener("click", () => showView("v-home"));
 $("btn-options").addEventListener("click", () => chrome.runtime.openOptionsPage());
-$("btn-video").addEventListener("click", () => showView("v-video"));
-$("btn-editor").addEventListener("click", () => showView("v-editor"));
 
 function showView(id) {
   document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
   $(id).classList.add("active");
-  $("btn-video").style.display  = (id === "v-editor" && steps.length > 0) ? "" : "none";
-  $("btn-editor").style.display = (id === "v-video"  && steps.length > 0) ? "" : "none";
 }
 
 // ── Recording ──────────────────────────────────────────────────────────────
 recBtn.addEventListener("click", async () => {
   if (!isRecording) {
-    const res = await sw({ type: "SP_START_RECORDING", sessionName: sessionName.value });
-    if (!res?.ok) { errorToast(res?.error || "Check your API key in Settings"); return; }
+    let streamId;
+    try {
+      streamId = await new Promise((resolve, reject) => {
+        chrome.desktopCapture.chooseDesktopMedia(["tab", "window", "screen"], (id) => {
+          if (!id) reject(new Error("Capture cancelled"));
+          else resolve(id);
+        });
+      });
+    } catch (err) {
+      console.warn("[Guidr] desktopCapture failed:", err);
+      errorToast(err.message === "Capture cancelled"
+        ? "Recording cancelled"
+        : "Could not start screen capture: " + err.message);
+      return;
+    }
+
+    // Consume the streamId here (same renderer as chooseDesktopMedia) — this
+    // is the only context Chrome will let the streamId be used from.
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          mandatory: {
+            chromeMediaSource: "desktop",
+            chromeMediaSourceId: streamId,
+          },
+        },
+      });
+    } catch (err) {
+      console.warn("[Guidr] getUserMedia failed:", err);
+      errorToast(`Could not start capture (${err.name}): ${err.message}`);
+      return;
+    }
+
+    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    if (!tab) { errorToast("No active tab to record"); stream.getTracks().forEach(t => t.stop()); return; }
+
+    const hasHost = await chrome.permissions.contains({ origins: ["<all_urls>"] });
+    if (!hasHost) { try { await chrome.permissions.request({ origins: ["<all_urls>"] }); } catch {} }
+
+    // Countdown before MediaRecorder actually starts — gives Chrome's "is
+    // sharing" indicator time to settle (otherwise the recording starts on
+    // a visible layout shift) and signals to the user that recording is
+    // imminent. We send SP_START_RECORDING with the *future* startedAt so
+    // chapter markers align to the real MediaRecorder start moment.
+    const STARTUP_COUNTDOWN_MS = 3000;
+    recordingStartedAt = Date.now() + STARTUP_COUNTDOWN_MS;
+    const res = await sw({
+      type: "SP_START_RECORDING",
+      sessionName: sessionName.value,
+      tabId: tab.id,
+      startedAt: recordingStartedAt,
+    });
+    if (!res?.ok) {
+      stream.getTracks().forEach(t => t.stop());
+      errorToast(res?.error || "Could not start recording");
+      return;
+    }
+
+    // Countdown UI: amber button, big number, re-pulse animation each tick.
+    recBtn.classList.add("counting");
+    for (let n = 3; n >= 1; n--) {
+      recLabel.classList.remove("tick");
+      void recLabel.offsetWidth; // force reflow so the animation restarts
+      recLabel.textContent = String(n);
+      recLabel.classList.add("tick");
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    recBtn.classList.remove("counting");
+    recLabel.classList.remove("tick");
+
+    // Wire up MediaRecorder locally.
+    recordingMimeType = pickMimeType();
+    mediaRecorder = new MediaRecorder(stream, {
+      mimeType: recordingMimeType,
+      videoBitsPerSecond: 4_000_000,
+    });
+    mediaChunks = [];
+    mediaStream = stream;
+    mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) mediaChunks.push(e.data); };
+    mediaRecorder.start(1000);
+
+    // If the captured tab/window closes, MediaRecorder's track will end —
+    // surface a clean stop in that case.
+    stream.getVideoTracks()[0]?.addEventListener("ended", () => {
+      if (isRecording) finalizeRecording();
+    });
+
     currentSessionId = res.sessionId;
     steps = [];
     setRecording(true);
     captureSection.style.display = "";
     captureList.innerHTML = "";
+
+    // Green "go" burst announcing recording is live, then settle into the
+    // standard recording state.
+    recBtn.classList.add("starting");
+    setTimeout(() => recBtn.classList.remove("starting"), 650);
   } else {
-    await sw({ type: "SP_STOP_RECORDING" });
-    setRecording(false);
-    toast("Recording stopped");
-    if (steps.length) {
-      setTimeout(() => openEditor(), 400);
-    }
-    loadSessions();
+    await finalizeRecording();
   }
 });
+
+async function finalizeRecording() {
+  if (!mediaRecorder) return;
+  const recorder = mediaRecorder;
+  const sessionId = currentSessionId;
+  mediaRecorder = null;
+
+  try {
+    await new Promise((resolve) => {
+      if (recorder.state === "inactive") return resolve();
+      recorder.addEventListener("stop", () => resolve(), { once: true });
+      recorder.stop();
+    });
+  } catch (err) {
+    console.warn("[Guidr] recorder stop failed:", err);
+  }
+
+  if (mediaStream) {
+    mediaStream.getTracks().forEach(t => t.stop());
+    mediaStream = null;
+  }
+
+  const blob = new Blob(mediaChunks, { type: recordingMimeType });
+  const durationMs = Date.now() - recordingStartedAt;
+  mediaChunks = [];
+
+  try {
+    if (sessionId && blob.size > 0) {
+      await db.saveRecording({ sessionId, blob, mimeType: recordingMimeType, durationMs });
+    }
+  } catch (err) {
+    console.error("[Guidr] saveRecording failed:", err);
+    errorToast("Could not save recording: " + err.message);
+  }
+
+  await sw({ type: "SP_STOP_RECORDING" });
+  setRecording(false);
+  toast("Recording stopped");
+  loadSessions();
+  if (steps.length) setTimeout(() => openSession(sessionId), 300);
+}
+
+function pickMimeType() {
+  const candidates = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"];
+  for (const c of candidates) {
+    if (MediaRecorder.isTypeSupported(c)) return c;
+  }
+  return "video/webm";
+}
 
 function setRecording(val) {
   isRecording = val;
@@ -130,45 +253,29 @@ function setRecording(val) {
 
 function onStepCaptured(step) {
   steps.push(step);
-  // Add to live capture list
   const item = document.createElement("div");
   item.className = "capture-item";
   item.id = `cap-${step.id}`;
   const label = step.target?.text || step.target?.ariaLabel || step.pageTitle || "Step";
   item.innerHTML = `
     <div class="capture-num">${steps.length}</div>
-    <div class="capture-info"><span>${escHtml(label.slice(0,50))}</span></div>
-    <span class="capture-status pending">●</span>`;
+    <div class="capture-info">
+      <span>${escHtml(label.slice(0,50))}</span>
+      <span class="ts">${formatMs(step.tsMs)}</span>
+    </div>`;
   captureList.prepend(item);
 }
 
 function onStepEnriched(step) {
   const i = steps.findIndex(s => s.id === step.id);
   if (i !== -1) steps[i] = step;
-  // Update capture indicator
-  const cap = $(`cap-${step.id}`);
-  if (cap) {
-    cap.querySelector(".capture-status").className = "capture-status ok";
-    cap.querySelector(".capture-status").textContent = "done";
+  if ($("v-editor").classList.contains("active") && steps[currentStepIdx]?.id === step.id) {
+    loadStepFields(step);
   }
-  // Enrichment only changes text fields — never the screenshot or annotations.
-  // Rebuilding the thumb strip or calling loadStepIntoEditor here would reset
-  // every <img src=""> and re-fetch screenshots from the SW, causing a visible
-  // flash + reload. Update only what actually changed.
-  const thumb = thumbStrip.querySelector(`.thumb-item[data-id="${step.id}"]`);
-  if (thumb) thumb.classList.toggle("enriched", !!step.enriched);
-
-  if (document.getElementById("v-editor").classList.contains("active") &&
-      steps[currentStepIdx]?.id === step.id) {
-    stepTitle.value = step.title || "";
-    stepBody.value  = step.body || "";
-    stepVoice.value = step.voiceoverScript || "";
-    autoResize(stepTitle); autoResize(stepBody); autoResize(stepVoice);
-    updateCharCounts();
-  }
+  renderChapterRail();
 }
 
-// ── Sessions ───────────────────────────────────────────────────────────────
+// ── Sessions list ──────────────────────────────────────────────────────────
 async function loadSessions() {
   const res = await sw({ type: "SP_GET_SESSIONS" });
   const list = res?.sessions || [];
@@ -177,191 +284,204 @@ async function loadSessions() {
     return;
   }
   sessionsList.innerHTML = "";
-  list.slice(0, 8).forEach(s => {
+  list.slice(0, 12).forEach(s => {
     const card = document.createElement("div");
     card.className = "session-card";
+    const sizeLabel = s.hasRecording
+      ? `<span class="size-badge has-vid">${formatBytes(s.recordingBytes)}</span>`
+      : `<span class="size-badge">no video</span>`;
     card.innerHTML = `
-      <img class="session-thumb" src="" data-sid="${s.id}" alt=""/>
       <div class="session-card-body">
         <strong>${escHtml(s.name)}</strong>
-        <span>${s.stepCount} step${s.stepCount!==1?"s":""} · ${timeAgo(s.updatedAt)}</span>
+        <span>${s.stepCount} step${s.stepCount!==1?"s":""} · ${timeAgo(s.updatedAt)} · </span>${sizeLabel}
       </div>
-      <button class="session-delete" title="Delete this guide">×</button>
-      <span class="chevron">›</span>`;
-    sw({ type: "SP_GET_SESSION_THUMB", sessionId: s.id }).then((r) => {
-      if (r?.dataUrl) card.querySelector("[data-sid]").src = r.dataUrl;
+      <div class="session-card-actions">
+        ${s.hasRecording ? `<button class="icon-act" data-act="drop-vid" title="Delete video track (keeps steps + text)">⊘ vid</button>` : ""}
+        <button class="icon-act danger" data-act="delete" title="Delete this guide">×</button>
+      </div>`;
+    card.addEventListener("click", (e) => {
+      if (e.target.closest("[data-act]")) return;
+      openSession(s.id);
     });
-    card.addEventListener("click", () => openSession(s.id));
-    card.querySelector(".session-delete").addEventListener("click", async (e) => {
+    card.querySelector('[data-act="delete"]').addEventListener("click", async (e) => {
       e.stopPropagation();
       if (!confirm(`Delete "${s.name}"? This cannot be undone.`)) return;
-      const res = await sw({ type: "SP_DELETE_SESSION", sessionId: s.id });
-      if (!res?.ok) { errorToast("Could not delete guide"); return; }
+      const r = await sw({ type: "SP_DELETE_SESSION", sessionId: s.id });
+      if (!r?.ok) return errorToast("Could not delete guide");
       toast("Guide deleted");
+      loadSessions();
+    });
+    card.querySelector('[data-act="drop-vid"]')?.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const mb = (s.recordingBytes / 1024 / 1024).toFixed(1);
+      if (!confirm(`Delete video track for "${s.name}" (${mb} MB)? Step text is kept; screenshots and video export will no longer be available.`)) return;
+      const r = await sw({ type: "SP_DELETE_RECORDING", sessionId: s.id });
+      if (!r?.ok) return errorToast("Could not delete video track");
+      toast("Video track deleted");
       loadSessions();
     });
     sessionsList.appendChild(card);
   });
 }
 
+// ── Open session in editor ─────────────────────────────────────────────────
 async function openSession(sessionId) {
-  const res = await sw({ type: "SP_GET_SESSION", sessionId });
-  if (!res?.ok) return;
+  console.log("[Guidr] openSession", sessionId);
+  let res;
+  try {
+    res = await sw({ type: "SP_GET_SESSION", sessionId });
+  } catch (err) {
+    console.error("[Guidr] SP_GET_SESSION failed:", err);
+    return errorToast("Could not open guide: " + err.message);
+  }
+  if (!res?.ok) {
+    console.warn("[Guidr] SP_GET_SESSION returned not-ok:", res);
+    return errorToast("Could not open guide");
+  }
+
   currentSessionId = sessionId;
-  steps = res.session.steps;
+  currentSession = res.session;
+  steps = (res.session.steps || []).map(normalizeStep);
   sessionName.value = res.session.name;
   currentStepIdx = 0;
-  openEditor();
-}
 
-function openEditor() {
+  // Show the editor immediately — recording load is best-effort and must
+  // never block the UI. If the video blob fails to load (broken webm
+  // duration, missing recording, etc.) the editor still shows the steps
+  // and text and stays usable.
   showView("v-editor");
-  $("btn-video").style.display = "";
-  renderThumbStrip();
-  loadStepIntoEditor(currentStepIdx);
+  renderChapterRail();
+  loadStepIntoEditor(0);
+
+  thumbCache.clear();
+  loadRecordingIntoPlayers(sessionId)
+    .then(() => populateRailThumbnails())
+    .catch((err) => console.error("[Guidr] loadRecordingIntoPlayers failed:", err));
 }
 
-// ── Thumbnail strip ────────────────────────────────────────────────────────
-// Index-dependent state (badge number, dataset.idx, alt, .active) is rewritten
-// by renumberThumbs() after any reorder/delete, so handlers must resolve the
-// current index from dataset.idx at event time — not from a captured closure.
-function createThumbItem(step, i) {
-  const item = document.createElement("div");
-  item.className = `thumb-item${i === currentStepIdx ? " active" : ""}${step.enriched ? " enriched" : ""}`;
-  item.draggable = true;
-  item.dataset.idx = i;
-  item.dataset.id  = step.id;
-  item.innerHTML = `
-    <img class="thumb-img" src="" alt="Step ${i+1}"/>
-    <div class="thumb-num">${i+1}</div>
-    <button class="thumb-del" title="Delete step ${i+1}">×</button>`;
-  loadStepScreenshot(step.id, "after").then(url => {
-    if (url) item.querySelector("img").src = url;
-  });
-  setupDrag(item);
-  return item;
+function normalizeStep(s) {
+  return {
+    included: true,
+    mediaMode: "screenshot",
+    ...s,
+  };
 }
 
-function renumberThumbs() {
-  thumbStrip.querySelectorAll(".thumb-item").forEach((item, i) => {
-    item.dataset.idx = i;
-    item.querySelector(".thumb-num").textContent = i + 1;
-    item.querySelector(".thumb-del").title = `Delete step ${i+1}`;
-    item.querySelector("img").alt = `Step ${i+1}`;
-    item.classList.toggle("active", i === currentStepIdx);
-  });
-}
+async function loadRecordingIntoPlayers(sessionId) {
+  if (recordingObjectUrl) URL.revokeObjectURL(recordingObjectUrl);
+  if (extractorObjectUrl) URL.revokeObjectURL(extractorObjectUrl);
+  recordingObjectUrl = null;
+  extractorObjectUrl = null;
 
-function renderThumbStrip() {
-  thumbStrip.innerHTML = "";
-  steps.forEach((step, i) => thumbStrip.appendChild(createThumbItem(step, i)));
-  const addBtn = document.createElement("button");
-  addBtn.className = "thumb-add";
-  addBtn.title = "Record another step";
-  addBtn.textContent = "+";
-  addBtn.addEventListener("click", () => {
-    showView("v-home");
-    if (!isRecording) recBtn.click();
-  });
-  thumbStrip.appendChild(addBtn);
-}
-
-// Delegated handler — survives in-place reorder/delete because it reads
-// dataset.idx at click time instead of capturing the index in a closure.
-thumbStrip.addEventListener("click", (e) => {
-  const item = e.target.closest(".thumb-item");
-  if (!item || !thumbStrip.contains(item)) return;
-  const idx = Number(item.dataset.idx);
-  if (e.target.closest(".thumb-del")) {
-    e.stopPropagation();
-    deleteStepAt(idx);
+  // Read directly from IDB — chrome.runtime messaging strips Blobs from
+  // sendResponse payloads, so going through the service worker turns the
+  // recording into an empty object.
+  const rec = await db.getRecording(sessionId);
+  if (!rec?.blob) {
+    console.log("[Guidr] no recording blob for session", sessionId);
+    srcVideo.removeAttribute("src");
+    srcVideo.style.display = "none";
+    extractor.removeAttribute("src");
+    videoEmpty.style.display = "";
     return;
   }
-  currentStepIdx = idx;
-  loadStepIntoEditor(idx);
-});
+  console.log("[Guidr] loaded recording blob", { bytes: rec.byteSize, type: rec.mimeType });
+  videoEmpty.style.display = "none";
+  recordingObjectUrl = URL.createObjectURL(rec.blob);
+  extractorObjectUrl = URL.createObjectURL(rec.blob);
+  srcVideo.src = recordingObjectUrl;
+  srcVideo.style.display = "";
+  extractor.src = extractorObjectUrl;
 
-// ── Drag-to-reorder ────────────────────────────────────────────────────────
-let dragSrcIdx = null;
-function setupDrag(item) {
-  item.addEventListener("dragstart", () => {
-    dragSrcIdx = Number(item.dataset.idx);
-    item.style.opacity = "0.4";
+  // Wait for the extractor to be seekable — but never hang. MediaRecorder
+  // webm output has missing duration metadata in some Chrome versions which
+  // can delay loadeddata indefinitely; we cap the wait at 3s and let the
+  // editor stay usable either way.
+  await Promise.race([
+    new Promise((resolve) => {
+      if (extractor.readyState >= 2) return resolve();
+      extractor.addEventListener("loadeddata", resolve, { once: true });
+      extractor.addEventListener("error", (e) => {
+        console.warn("[Guidr] extractor error:", e);
+        resolve();
+      }, { once: true });
+    }),
+    new Promise((resolve) => setTimeout(resolve, 3000)),
+  ]);
+}
+
+// ── Chapter rail ───────────────────────────────────────────────────────────
+// Thumbnails are extracted lazily once the recording is ready; this cache
+// keeps us from re-seeking every time the rail re-renders.
+const thumbCache = new Map(); // stepId → dataURL
+
+function renderChapterRail() {
+  chapterRail.innerHTML = "";
+  steps.forEach((step, i) => {
+    const chip = document.createElement("div");
+    chip.className = `chip${i === currentStepIdx ? " active" : ""}${step.included === false ? " excluded" : ""}`;
+    chip.dataset.idx = i;
+    chip.dataset.id = step.id;
+    const cached = thumbCache.get(step.id);
+    chip.innerHTML = `
+      <img class="chip-thumb" src="${cached || ""}" alt=""/>
+      <div class="chip-meta">
+        <span class="chip-num">${i+1}</span>
+        <span class="chip-time">${formatMs(step.tsMs)}</span>
+      </div>`;
+    chip.addEventListener("click", () => {
+      currentStepIdx = i;
+      loadStepIntoEditor(i);
+    });
+    chapterRail.appendChild(chip);
   });
-  item.addEventListener("dragend",   () => { item.style.opacity = ""; dragSrcIdx = null; });
-  item.addEventListener("dragover",  (e) => { e.preventDefault(); item.classList.add("drag-over"); });
-  item.addEventListener("dragleave", () => item.classList.remove("drag-over"));
-  item.addEventListener("drop",      (e) => {
-    e.preventDefault();
-    item.classList.remove("drag-over");
-    const dstIdx = Number(item.dataset.idx);
-    if (dragSrcIdx === null || dragSrcIdx === dstIdx) return;
+}
 
-    // Reorder the steps array
-    const moved = steps.splice(dragSrcIdx, 1)[0];
-    steps.splice(dstIdx, 0, moved);
-    currentStepIdx = dstIdx;
-
-    // Move the DOM node in place (don't rebuild — that re-fetches every <img>).
-    // Forward drag (src < dst): src lands after dst. Backward drag: before dst.
-    const items = thumbStrip.querySelectorAll(".thumb-item");
-    const srcNode = items[dragSrcIdx];
-    if (dragSrcIdx < dstIdx) item.after(srcNode);
-    else                     item.before(srcNode);
-    renumberThumbs();
-
-    const orderedIds = steps.map(s => s.id);
-    sw({ type: "SP_REORDER_STEPS", sessionId: currentSessionId, orderedIds });
-    loadStepIntoEditor(currentStepIdx);
-  });
+async function populateRailThumbnails() {
+  if (!extractor.src) return;
+  for (const step of steps) {
+    if (thumbCache.has(step.id)) continue;
+    try {
+      const dataUrl = await extractFrame(step.tsMs);
+      thumbCache.set(step.id, dataUrl);
+      const chip = chapterRail.querySelector(`.chip[data-id="${step.id}"] .chip-thumb`);
+      if (chip) chip.src = dataUrl;
+    } catch (err) {
+      console.warn("[Guidr] thumb extraction failed for step", step.index, ":", err.message);
+    }
+  }
 }
 
 // ── Step editor ────────────────────────────────────────────────────────────
-async function loadStepIntoEditor(idx) {
+function loadStepIntoEditor(idx) {
   const step = steps[idx];
   if (!step) return;
   currentStepIdx = idx;
 
-  // Screenshot
-  const url = await loadStepScreenshot(step.id, "after") || await loadStepScreenshot(step.id, "before");
-  currentShotDataUrl = url;
-  if (url) {
-    const sizeCanvasToShot = () => {
-      if (!mainShot.naturalWidth) return;
-      const r = mainShot.getBoundingClientRect();
-      annoCanvas.width  = mainShot.naturalWidth;
-      annoCanvas.height = mainShot.naturalHeight;
-      // Preserve the toggled pointer-events; only set position/size.
-      annoCanvas.style.position = "absolute";
-      annoCanvas.style.top = "0";
-      annoCanvas.style.left = "0";
-      annoCanvas.style.width  = r.width  + "px";
-      annoCanvas.style.height = r.height + "px";
-      annotations = step.annotations || [];
-      renderAnnotations();
-    };
-    mainShot.onload = sizeCanvasToShot;
-    mainShot.src = url;
-    // If the browser served the same URL from cache, onload won't fire — size now.
-    if (mainShot.complete && mainShot.naturalWidth) sizeCanvasToShot();
+  // Seek the source video to this step's timestamp so the viewer sees the
+  // frame that prompted the click.
+  if (srcVideo.src) {
+    try { srcVideo.currentTime = Math.max(0, step.tsMs / 1000); } catch {}
   }
 
-  // Text fields
+  loadStepFields(step);
+  stepInclude.checked = step.included !== false;
+  stepMedia.value = step.mediaMode || "screenshot";
+  stepTs.textContent = formatMs(step.tsMs);
+
+  prevBtn.disabled = idx === 0;
+  nextBtn.disabled = idx === steps.length - 1;
+  stepCounter.textContent = `${idx + 1} / ${steps.length}`;
+
+  renderChapterRail();
+}
+
+function loadStepFields(step) {
   stepTitle.value = step.title || "";
   stepBody.value  = step.body || "";
   stepVoice.value = step.voiceoverScript || "";
   autoResize(stepTitle); autoResize(stepBody); autoResize(stepVoice);
   updateCharCounts();
-
-  // Navigation
-  prevBtn.disabled = idx === 0;
-  nextBtn.disabled = idx === steps.length - 1;
-  stepCounter.textContent = `${idx + 1} / ${steps.length}`;
-
-  // Refresh thumbnail strip selection
-  thumbStrip.querySelectorAll(".thumb-item").forEach((t, i) => {
-    t.classList.toggle("active", i === idx);
-  });
 }
 
 // Auto-save on edit
@@ -375,6 +495,21 @@ let saveTimer;
   });
 });
 
+stepInclude.addEventListener("change", () => {
+  const step = steps[currentStepIdx];
+  if (!step) return;
+  step.included = stepInclude.checked;
+  renderChapterRail();
+  saveCurrentStep();
+});
+
+stepMedia.addEventListener("change", () => {
+  const step = steps[currentStepIdx];
+  if (!step) return;
+  step.mediaMode = stepMedia.value;
+  saveCurrentStep();
+});
+
 async function saveCurrentStep() {
   const step = steps[currentStepIdx];
   if (!step) return;
@@ -382,61 +517,24 @@ async function saveCurrentStep() {
     title: stepTitle.value.trim(),
     body:  stepBody.value.trim(),
     voiceoverScript: stepVoice.value.trim(),
-    annotations: JSON.parse(JSON.stringify(annotations)),
+    included: step.included !== false,
+    mediaMode: step.mediaMode || "screenshot",
   };
   Object.assign(step, updates);
   await sw({ type: "SP_UPDATE_STEP", stepId: step.id, updates });
 }
 
-// Step navigation
-prevBtn.addEventListener("click", () => { if (currentStepIdx > 0) { currentStepIdx--; loadStepIntoEditor(currentStepIdx); } });
-nextBtn.addEventListener("click", () => { if (currentStepIdx < steps.length-1) { currentStepIdx++; loadStepIntoEditor(currentStepIdx); } });
+prevBtn.addEventListener("click", () => { if (currentStepIdx > 0) loadStepIntoEditor(currentStepIdx - 1); });
+nextBtn.addEventListener("click", () => { if (currentStepIdx < steps.length-1) loadStepIntoEditor(currentStepIdx + 1); });
 
-// Keyboard shortcuts
 document.addEventListener("keydown", (e) => {
-  if (!document.getElementById("v-editor").classList.contains("active")) return;
-  if (e.target.matches("textarea, input")) return;
+  if (!$("v-editor").classList.contains("active")) return;
+  if (e.target.matches("textarea, input, select")) return;
   if (e.key === "ArrowLeft")  prevBtn.click();
   if (e.key === "ArrowRight") nextBtn.click();
-  if (e.key === "Delete" || e.key === "Backspace") {
-    if (selectedAnnoId !== null) removeAnnotation(selectedAnnoId);
-  }
-  if ((e.metaKey || e.ctrlKey) && e.key === "z") { undoAnnotation(); }
 });
 
-// ── AI Enrichment ───────────────────────────────────────────────────────────
-$("enrichOneBtn").addEventListener("click", async () => {
-  const step = steps[currentStepIdx];
-  if (!step) return;
-  const btn = $("enrichOneBtn");
-  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Enriching…';
-  const res = await sw({ type: "SP_ENRICH_STEP", stepId: step.id, sessionId: currentSessionId });
-  btn.disabled = false; btn.textContent = "Enrich with AI";
-  if (res?.ok) { onStepEnriched(res.step); toast("Step enriched"); }
-  else errorToast(formatApiError(res?.error));
-});
-
-$("enrichAllBtn").addEventListener("click", async () => {
-  const btn = $("enrichAllBtn");
-  btn.disabled = true; btn.textContent = "Enriching…";
-  const res = await sw({ type: "SP_ENRICH_ALL", sessionId: currentSessionId });
-  btn.disabled = false; btn.textContent = "Enrich all steps";
-  // Surface the first per-step error if any came back; otherwise success.
-  const failed = (res?.steps || []).find(s => s.enrichError);
-  if (failed) errorToast(formatApiError(failed.enrichError));
-  else toast("All steps enriched");
-});
-
-// ── Annotation system ───────────────────────────────────────────────────────
-let annoUndoStack = [];
-
-$("toggleAnnoBtn").addEventListener("click", () => {
-  annoMode = !annoMode;
-  $("annoToolbar").style.display = annoMode ? "" : "none";
-  $("toggleAnnoBtn").classList.toggle("active-tool", annoMode);
-  annoCanvas.style.cursor = annoMode ? "crosshair" : "default";
-  annoCanvas.style.pointerEvents = annoMode ? "auto" : "none";
-});
+$("deleteStepBtn").addEventListener("click", () => deleteStepAt(currentStepIdx));
 
 async function deleteStepAt(idx) {
   const step = steps[idx];
@@ -444,12 +542,8 @@ async function deleteStepAt(idx) {
   const label = (step.title || `Step ${idx + 1}`).trim();
   if (!confirm(`Delete "${label}"? This cannot be undone.`)) return;
   const res = await sw({ type: "SP_DELETE_STEP", stepId: step.id, sessionId: currentSessionId });
-  if (!res?.ok) { errorToast("Could not delete step"); return; }
+  if (!res?.ok) return errorToast("Could not delete step");
   steps.splice(idx, 1);
-  // Remove just the affected thumb node so the surrounding thumbs keep
-  // their <img> intact and don't re-fetch screenshots.
-  const node = thumbStrip.querySelector(`.thumb-item[data-id="${step.id}"]`);
-  if (node) node.remove();
   if (!steps.length) {
     toast("Step deleted — no steps remain");
     showView("v-home");
@@ -458,277 +552,166 @@ async function deleteStepAt(idx) {
   }
   if (currentStepIdx >= steps.length) currentStepIdx = steps.length - 1;
   else if (idx < currentStepIdx) currentStepIdx--;
-  renumberThumbs();
   loadStepIntoEditor(currentStepIdx);
   toast("Step deleted");
 }
 
-$("deleteStepBtn").addEventListener("click", () => deleteStepAt(currentStepIdx));
-
-$("retakeBtn").addEventListener("click", async () => {
-  if (!isRecording) {
-    showView("v-home");
-    toast("Start recording and re-capture this step, then come back.");
-    return;
-  }
-  // If actively recording, mark step for re-capture
-  toast("Perform the action again to re-capture this step.");
-});
-
-document.querySelectorAll(".tool-btn[data-tool]").forEach(btn => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".tool-btn[data-tool]").forEach(b => b.classList.remove("active"));
-    btn.classList.add("active");
-    activeTool = btn.dataset.tool;
-  });
-});
-
-$("undoBtn").addEventListener("click", undoAnnotation);
-$("clearAnnoBtn").addEventListener("click", () => {
-  annoUndoStack.push([...annotations]);
-  annotations = [];
-  renderAnnotations();
-  saveCurrentStep();
-});
-
-annoCanvas.addEventListener("mousedown", onAnnoMouseDown);
-annoCanvas.addEventListener("mousemove", onAnnoMouseMove);
-annoCanvas.addEventListener("mouseup",   onAnnoMouseUp);
-annoCanvas.addEventListener("click",     onAnnoClick);
-
-function canvasPos(e) {
-  const rect = annoCanvas.getBoundingClientRect();
-  const scaleX = annoCanvas.width  / rect.width;
-  const scaleY = annoCanvas.height / rect.height;
-  return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
-}
-
-function onAnnoClick(e) {
-  if (!annoMode) return;
-  const pos = canvasPos(e);
-  if (activeTool === "circle") {
-    annoUndoStack.push([...annotations]);
-    annotations.push({ id: Date.now(), type:"circle", x:pos.x, y:pos.y,
-      r:22, color: branding.brandCircleColor, label: String(annotations.filter(a=>a.type==="circle").length+1) });
-    renderAnnotations();
-    saveCurrentStep();
-  }
-  // Click to select/deselect existing annotation
-  const hit = annotations.find(a => hitTest(a, pos));
-  selectedAnnoId = hit ? hit.id : null;
-  renderAnnotations();
-}
-
-function onAnnoMouseDown(e) {
-  if (!annoMode) return;
-  const pos = canvasPos(e);
-  if (activeTool === "highlight" || activeTool === "arrow") {
-    isDragging = true;
-    dragStart = pos;
-    pendingAnnotation = { id: Date.now(), type: activeTool, x1:pos.x, y1:pos.y, x2:pos.x, y2:pos.y,
-      color: activeTool === "highlight" ? branding.brandHighlightColor : branding.brandArrowColor };
-  }
-}
-function onAnnoMouseMove(e) {
-  if (!isDragging || !pendingAnnotation) return;
-  const pos = canvasPos(e);
-  pendingAnnotation.x2 = pos.x; pendingAnnotation.y2 = pos.y;
-  renderAnnotations(pendingAnnotation);
-}
-function onAnnoMouseUp(e) {
-  if (!isDragging || !pendingAnnotation) return;
-  isDragging = false;
-  const dx = Math.abs(pendingAnnotation.x2 - pendingAnnotation.x1);
-  const dy = Math.abs(pendingAnnotation.y2 - pendingAnnotation.y1);
-  if (dx > 5 || dy > 5) {
-    annoUndoStack.push([...annotations]);
-    annotations.push({ ...pendingAnnotation });
-    saveCurrentStep();
-  }
-  pendingAnnotation = null;
-  renderAnnotations();
-}
-
-function undoAnnotation() {
-  if (!annoUndoStack.length) return;
-  annotations = annoUndoStack.pop();
-  renderAnnotations();
-  saveCurrentStep();
-}
-
-function removeAnnotation(id) {
-  annoUndoStack.push([...annotations]);
-  annotations = annotations.filter(a => a.id !== id);
-  selectedAnnoId = null;
-  renderAnnotations();
-  saveCurrentStep();
-}
-
-function hitTest(a, pos) {
-  if (a.type === "circle") {
-    const dx = a.x - pos.x, dy = a.y - pos.y;
-    return Math.sqrt(dx*dx+dy*dy) <= (a.r+6);
-  }
-  if (a.type === "highlight" || a.type === "arrow") {
-    const minX = Math.min(a.x1,a.x2)-10, maxX = Math.max(a.x1,a.x2)+10;
-    const minY = Math.min(a.y1,a.y2)-10, maxY = Math.max(a.y1,a.y2)+10;
-    return pos.x>=minX && pos.x<=maxX && pos.y>=minY && pos.y<=maxY;
-  }
-  return false;
-}
-
-function renderAnnotations(preview = null) {
-  annoCtx.clearRect(0, 0, annoCanvas.width, annoCanvas.height);
-  const all = preview ? [...annotations, preview] : annotations;
-  all.forEach(a => drawAnnotation(a, a.id === selectedAnnoId));
-}
-
-function colorForAnnotation(a) {
-  if (a.type === "circle")    return branding.brandCircleColor    || a.color || BRAND_DEFAULTS.brandCircleColor;
-  if (a.type === "arrow")     return branding.brandArrowColor     || a.color || BRAND_DEFAULTS.brandArrowColor;
-  if (a.type === "highlight") return branding.brandHighlightColor || a.color || BRAND_DEFAULTS.brandHighlightColor;
-  return a.color || BRAND_DEFAULTS.brandCircleColor;
-}
-
-function drawAnnotation(a, selected = false) {
-  const ctx = annoCtx;
-  ctx.save();
-  if (selected) { ctx.shadowColor = "#fff"; ctx.shadowBlur = 6; }
-  const color = colorForAnnotation(a);
-
-  if (a.type === "circle") {
-    // Outer glow
-    ctx.beginPath();
-    ctx.arc(a.x, a.y, a.r + 8, 0, Math.PI*2);
-    ctx.fillStyle = color + "22";
-    ctx.fill();
-    // Circle
-    ctx.beginPath();
-    ctx.arc(a.x, a.y, a.r, 0, Math.PI*2);
-    ctx.fillStyle = color + "cc";
-    ctx.fill();
-    ctx.strokeStyle = "#fff";
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-    // Label
-    ctx.fillStyle = "#fff";
-    ctx.font = `bold ${Math.round(a.r * 0.85)}px Syne, system-ui`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(a.label || "", a.x, a.y + 1);
-  }
-
-  if (a.type === "highlight") {
-    const x = Math.min(a.x1,a.x2), y = Math.min(a.y1,a.y2);
-    const w = Math.abs(a.x2-a.x1), h = Math.abs(a.y2-a.y1);
-    ctx.fillStyle = color + "33";
-    ctx.fillRect(x,y,w,h);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(x,y,w,h);
-  }
-
-  if (a.type === "arrow") {
-    const dx = a.x2-a.x1, dy = a.y2-a.y1;
-    const len = Math.sqrt(dx*dx+dy*dy);
-    if (len < 2) { ctx.restore(); return; }
-    const angle = Math.atan2(dy, dx);
-    const headLen = 14;
-    ctx.strokeStyle = color;
-    ctx.fillStyle   = color;
-    ctx.lineWidth   = 2.5;
-    ctx.lineCap     = "round";
-    ctx.beginPath();
-    ctx.moveTo(a.x1,a.y1);
-    ctx.lineTo(a.x2,a.y2);
-    ctx.stroke();
-    // Arrowhead
-    ctx.beginPath();
-    ctx.moveTo(a.x2, a.y2);
-    ctx.lineTo(a.x2 - headLen*Math.cos(angle-0.4), a.y2 - headLen*Math.sin(angle-0.4));
-    ctx.lineTo(a.x2 - headLen*Math.cos(angle+0.4), a.y2 - headLen*Math.sin(angle+0.4));
-    ctx.closePath();
-    ctx.fill();
-  }
-  ctx.restore();
-}
-
-// ── Video ───────────────────────────────────────────────────────────────────
-$("generateVideoBtn").addEventListener("click", async () => {
-  const btn = $("generateVideoBtn");
-  if (!steps.length) { toast("No steps to render"); return; }
-
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spin"></span> Rendering…';
-  $("progBar").style.display = "";
-
-  // Hydrate steps with screenshot data
-  const hydratedSteps = await Promise.all(
-    steps.map(async s => {
-      const full = await sw({ type: "SP_GET_STEP_FULL", stepId: s.id });
-      return full?.step || s;
-    })
-  );
-
-  try {
-    const result = await synthesizeVideo(hydratedSteps, {}, (p) => {
-      $("progFill").style.width = Math.round(p*100) + "%";
-    });
-    videoBlob = result.blob;
-    if (videoObjectUrl) URL.revokeObjectURL(videoObjectUrl);
-    videoObjectUrl = result.objectUrl;
-    $("videoEl").src = videoObjectUrl;
-    $("videoEl").style.display = "";
-    $("videoPlaceholder").style.display = "none";
-    $("downloadVideoBtn").style.display = "";
-    // Scroll the video-wrap into view so the finished render isn't half-hidden
-    // when the user clicked "Generate" from further down the panel.
-    $("v-video").scrollTop = 0;
-    toast("Video ready");
-  } catch(err) {
-    toast("Video error: " + err.message);
-  }
-  btn.disabled = false;
-  btn.textContent = "Re-generate";
-  $("progBar").style.display = "none";
-});
-
-$("downloadVideoBtn").addEventListener("click", () => {
-  if (!videoObjectUrl) return;
-  const a = document.createElement("a");
-  a.href = videoObjectUrl;
-  a.download = slugify(sessionName.value || "guide") + ".webm";
-  a.click();
-});
-
-// Full voiceover script
-$("genScriptBtn").addEventListener("click", async () => {
-  const btn = $("genScriptBtn");
-  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Writing…';
-  const res = await sw({ type: "SP_GEN_SCRIPT", sessionId: currentSessionId });
-  btn.disabled = false; btn.textContent = "Generate script";
-  if (res?.ok) { $("fullScript").value = res.script; autoResize($("fullScript")); }
+// ── AI Enrichment ──────────────────────────────────────────────────────────
+$("enrichOneBtn").addEventListener("click", async () => {
+  const step = steps[currentStepIdx];
+  if (!step) return;
+  const btn = $("enrichOneBtn");
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Enriching…';
+  let screenshotDataUrl = null;
+  try { screenshotDataUrl = await extractFrame(step.tsMs); } catch {}
+  const res = await sw({ type: "SP_ENRICH_STEP", stepId: step.id, sessionId: currentSessionId, screenshotDataUrl });
+  btn.disabled = false; btn.textContent = "Enrich with AI";
+  if (res?.ok) { onStepEnriched(res.step); toast("Step enriched"); }
   else errorToast(formatApiError(res?.error));
 });
 
-$("copyScriptBtn").addEventListener("click", () => {
-  navigator.clipboard.writeText($("fullScript").value).then(() => toast("Copied"));
+$("enrichAllBtn").addEventListener("click", async () => {
+  const btn = $("enrichAllBtn");
+  btn.disabled = true; btn.textContent = "Enriching…";
+  let failed = null;
+  for (const step of steps) {
+    if (step.enriched) continue;
+    let screenshotDataUrl = null;
+    try { screenshotDataUrl = await extractFrame(step.tsMs); } catch {}
+    const res = await sw({ type: "SP_ENRICH_STEP", stepId: step.id, sessionId: currentSessionId, screenshotDataUrl });
+    if (res?.ok) onStepEnriched(res.step);
+    else if (!failed) failed = res?.error;
+  }
+  btn.disabled = false; btn.textContent = "Enrich all steps";
+  if (failed) errorToast(formatApiError(failed));
+  else toast("All steps enriched");
 });
+
+// ── Frame extraction ───────────────────────────────────────────────────────
+// Seeks are serialized so concurrent callers don't race on currentTime.
+let extractChain = Promise.resolve();
+
+async function waitForExtractorReady() {
+  if (!extractor.src) throw new Error("No recording loaded");
+  if (extractor.readyState >= 2 && extractor.videoWidth > 0) return;
+  await new Promise((resolve) => {
+    const done = () => {
+      extractor.removeEventListener("loadeddata", done);
+      extractor.removeEventListener("canplay", done);
+      extractor.removeEventListener("error", done);
+      resolve();
+    };
+    extractor.addEventListener("loadeddata", done, { once: true });
+    extractor.addEventListener("canplay", done, { once: true });
+    extractor.addEventListener("error", done, { once: true });
+    setTimeout(done, 4000);
+  });
+  if (extractor.readyState < 2 || !extractor.videoWidth) {
+    throw new Error(`extractor not seekable (readyState=${extractor.readyState}, dims=${extractor.videoWidth}x${extractor.videoHeight})`);
+  }
+}
+
+function extractFrame(tsMs) {
+  const job = () => (async () => {
+    await waitForExtractorReady();
+    return new Promise((resolve, reject) => {
+      const target = Math.max(0, tsMs / 1000);
+      const onSeeked = () => {
+        extractor.removeEventListener("seeked", onSeeked);
+        extractor.removeEventListener("error", onErr);
+        try {
+          const w = extractor.videoWidth;
+          const h = extractor.videoHeight;
+          extractorCanvas.width = w;
+          extractorCanvas.height = h;
+          const ctx = extractorCanvas.getContext("2d");
+          ctx.drawImage(extractor, 0, 0, w, h);
+          resolve(extractorCanvas.toDataURL("image/jpeg", 0.85));
+        } catch (e) { reject(e); }
+      };
+      const onErr = (e) => {
+        extractor.removeEventListener("seeked", onSeeked);
+        extractor.removeEventListener("error", onErr);
+        reject(new Error("Extractor error during seek"));
+      };
+      extractor.addEventListener("seeked", onSeeked, { once: true });
+      extractor.addEventListener("error", onErr, { once: true });
+      // Safety net: some webms don't fire `seeked` reliably if the requested
+      // time is past a malformed duration boundary. Time out and resolve
+      // with whatever frame is currently on the extractor.
+      setTimeout(() => {
+        if (!extractor.seeking) onSeeked();
+      }, 1500);
+      extractor.currentTime = target;
+    });
+  })();
+  extractChain = extractChain.then(job, job);
+  return extractChain;
+}
 
 // ── Export ─────────────────────────────────────────────────────────────────
 exportBtn.addEventListener("click", async () => {
   if (!currentSessionId) return;
+  const fmt = exportFmt.value;
   exportBtn.textContent = "…";
   exportBtn.disabled = true;
-  const res = await sw({ type: "SP_EXPORT", sessionId: currentSessionId, format: exportFmt.value });
+  try {
+    if (fmt === "video") {
+      await downloadRecording();
+      toast("Video downloaded");
+    } else {
+      await doDocumentExport(fmt);
+    }
+  } catch (err) {
+    errorToast("Export failed: " + formatApiError(err.message || String(err)));
+  }
   exportBtn.textContent = "Export";
   exportBtn.disabled = false;
-  if (!res?.ok) { errorToast("Export failed: " + formatApiError(res?.error)); return; }
+});
 
-  if (res.clipboard) {
+async function downloadRecording() {
+  const rec = await db.getRecording(currentSessionId);
+  if (!rec?.blob) throw new Error("No video recording available for this guide");
+  const url = URL.createObjectURL(rec.blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = slugify(currentSession?.name || sessionName.value || "guide") + ".webm";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function doDocumentExport(fmt) {
+  // Build the export-ready session: only included steps, with screenshots
+  // derived from the video for steps that want one.
+  const included = steps.filter(s => s.included !== false);
+  if (!included.length && fmt !== "json") throw new Error("No steps marked Include");
+
+  const hydrated = [];
+  for (const step of included) {
+    let screenshot = null;
+    if (step.mediaMode !== "none" && extractor.src) {
+      try {
+        screenshot = await extractFrame(step.tsMs);
+        console.log("[Guidr] export: extracted frame for step", step.index, "at", step.tsMs, "ms ·", Math.round((screenshot?.length || 0) / 1024), "KB");
+      } catch (err) {
+        console.warn("[Guidr] export: frame extraction failed for step", step.index, ":", err.message);
+      }
+    } else if (!extractor.src) {
+      console.warn("[Guidr] export: no extractor.src — recording not loaded yet");
+    }
+    hydrated.push({ ...step, screenshotAfter: screenshot, screenshotBefore: null });
+  }
+
+  const result = await exportSession({
+    ...currentSession,
+    name: currentSession?.name || sessionName.value,
+    steps: hydrated,
+  }, fmt);
+
+  if (result.clipboard) {
     try {
-      const htmlBlob = new Blob([res.content], { type: "text/html" });
-      const textBlob = new Blob([res.content], { type: "text/plain" });
+      const htmlBlob = new Blob([result.content], { type: "text/html" });
+      const textBlob = new Blob([result.content], { type: "text/plain" });
       await navigator.clipboard.write([
         new ClipboardItem({ "text/html": htmlBlob, "text/plain": textBlob })
       ]);
@@ -739,18 +722,12 @@ exportBtn.addEventListener("click", async () => {
     return;
   }
 
-  const blob = new Blob([res.content], { type: res.mimeType });
+  const blob = new Blob([result.content], { type: result.mimeType });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url; a.download = res.filename; a.click();
+  a.href = url; a.download = result.filename; a.click();
   URL.revokeObjectURL(url);
-  toast("Downloaded " + res.filename);
-});
-
-// ── Screenshot loader (requests blob from SW) ──────────────────────────────
-async function loadStepScreenshot(stepId, which) {
-  const res = await sw({ type: "SP_GET_SCREENSHOT", stepId, which });
-  return res?.dataUrl || null;
+  toast("Downloaded " + result.filename);
 }
 
 // ── Char counts ────────────────────────────────────────────────────────────
@@ -792,6 +769,18 @@ function timeAgo(ts) {
   if (d < 86400000) return `${Math.floor(d/3600000)}h ago`;
   return `${Math.floor(d/86400000)}d ago`;
 }
+function formatMs(ms) {
+  const total = Math.max(0, ms || 0) / 1000;
+  const m = Math.floor(total / 60);
+  const s = (total - m * 60).toFixed(1);
+  return `${m}:${s.padStart(4, "0")}`;
+}
+function formatBytes(bytes) {
+  if (!bytes) return "0 KB";
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
 
 let toastTimer;
 function toast(msg, ms = 2600) {
@@ -802,7 +791,6 @@ function toast(msg, ms = 2600) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove("show"), ms);
 }
-
 function errorToast(msg, ms = 6000) {
   const el = $("toast");
   el.textContent = msg;
@@ -811,20 +799,14 @@ function errorToast(msg, ms = 6000) {
   toastTimer = setTimeout(() => el.classList.remove("show"), ms);
 }
 
-// Parse common LLM / API error strings into a short, actionable message.
 function formatApiError(raw) {
   if (!raw) return "Something went wrong. Check the service worker console.";
   const s = String(raw);
-
-  // Provider quota / rate-limit — surface the actual provider message and
-  // the retry-after window so the user can verify it's still rate-limited
-  // (rather than us showing a stale-looking generic toast).
   if (/\b429\b|quota|rate.?limit|resource_exhausted/i.test(s)) {
     const retryMatch = s.match(/retry after (\d+(?:\.\d+)?)s/i);
     const waitHint = retryMatch
       ? ` Try again in ~${Math.ceil(Number(retryMatch[1]))}s.`
       : " Wait a moment and retry, or switch model in Settings.";
-    // Strip our own "Provider 429:" prefix and the trailing "(retry after …)" we appended.
     const apiMsg = s
       .replace(/^\w+\s+\d{3}:\s*/, "")
       .replace(/\s*\(retry after [^)]+\)\s*$/i, "")
@@ -832,22 +814,17 @@ function formatApiError(raw) {
     const detail = apiMsg.length > 140 ? apiMsg.slice(0, 137) + "…" : apiMsg;
     return `Rate limit: ${detail}.${waitHint}`;
   }
-  // Billing / payment
   if (/insufficient|billing|payment.?required|\b402\b/i.test(s)) {
     return "Account has no credits. Top up at your provider's billing page, then retry.";
   }
-  // Auth
   if (/\b401\b|unauthorized|invalid.?api.?key|api.?key.?not.?valid/i.test(s)) {
     return "API key was rejected. Re-check it in Settings under Provider.";
   }
-  // Model not found
   if (/\b404\b|model.*not.?(found|exist)|no.?such.?model/i.test(s)) {
     return "Selected model isn't available for your key. Pick a different one in Settings.";
   }
-  // Permission / blocked content
   if (/\b403\b|permission|forbidden|safety|blocked/i.test(s)) {
     return "Provider refused the request (permission or safety filter). Try a different model.";
   }
-  // Default: trim long error to one line
   return s.length > 180 ? s.slice(0, 177) + "…" : s;
 }
