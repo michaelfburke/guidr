@@ -46,6 +46,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     SP_UPDATE_SESSION:     () => handleUpdateSession(msg, sendResponse),
     SP_GET_RECORDING:      () => handleGetRecording(msg, sendResponse),
     SP_DELETE_RECORDING:   () => handleDeleteRecording(msg, sendResponse),
+    SP_DELETE_VOICE:       () => handleDeleteVoice(msg, sendResponse),
+    SP_VOICE_PREPARE:      () => handleVoicePrepare(sendResponse),
+    SP_VOICE_START:        () => handleVoiceStart(msg, sendResponse),
+    SP_VOICE_STOP:         () => handleVoiceStop(sendResponse),
+    SP_VOICE_CANCEL:       () => handleVoiceCancel(sendResponse),
     SP_GEN_SCRIPT:         () => handleGenScript(msg, sendResponse),
   };
 
@@ -174,6 +179,10 @@ async function handleEnrichStep({ stepId, sessionId, screenshotDataUrl }, sendRe
   if (!step || !settings.apiKey) { sendResponse({ ok: false }); return; }
 
   try {
+    // Defensive: existing installs where the options page was never
+    // explicitly opened may have apiKey set but provider undefined. The
+    // default matches options/main.js (state.provider = "gemini").
+    if (!settings.provider) settings.provider = "gemini";
     if (settings.provider === "openrouter" && settings.openrouterModel) {
       settings.model = settings.openrouterModel;
     }
@@ -281,6 +290,96 @@ async function handleDeleteRecording({ sessionId }, sendResponse) {
   sendResponse({ ok: true });
 }
 
+async function handleDeleteVoice({ sessionId }, sendResponse) {
+  await db.deleteVoiceRecording(sessionId);
+  sendResponse({ ok: true });
+}
+
+// ─── Offscreen mic capture ──────────────────────────────────────────────────
+// Side panels can't host the mic permission prompt (Chrome side-panel
+// limitation — getUserMedia rejects with NotAllowedError before any prompt
+// UI appears). We host mic capture in an offscreen document instead.
+
+const OFFSCREEN_PATH = "offscreen/voice.html";
+
+async function ensureOffscreen() {
+  const contexts = await chrome.runtime.getContexts({
+    contextTypes: ["OFFSCREEN_DOCUMENT"],
+  });
+  if (contexts.length > 0) return;
+  await chrome.offscreen.createDocument({
+    url: OFFSCREEN_PATH,
+    reasons: [chrome.offscreen.Reason.USER_MEDIA],
+    justification: "Recording microphone narration alongside screen captures.",
+  });
+}
+
+async function closeOffscreen() {
+  const contexts = await chrome.runtime.getContexts({
+    contextTypes: ["OFFSCREEN_DOCUMENT"],
+  });
+  if (contexts.length === 0) return;
+  try { await chrome.offscreen.closeDocument(); } catch {}
+}
+
+async function relayToOffscreen(payload) {
+  try {
+    const res = await chrome.runtime.sendMessage({ target: "offscreen-voice", ...payload });
+    return res || { ok: false, error: "no-response" };
+  } catch (err) {
+    return { ok: false, error: "relay-failed", message: err?.message };
+  }
+}
+
+async function handleVoicePrepare(sendResponse) {
+  try {
+    await ensureOffscreen();
+    const res = await relayToOffscreen({ type: "OFF_VOICE_PREPARE" });
+    sendResponse(res);
+  } catch (err) {
+    console.warn("[Guidr] handleVoicePrepare failed:", err);
+    sendResponse({ ok: false, error: "sw-failed", message: err?.message });
+  }
+}
+
+async function handleVoiceStart({ sessionId, startedAt }, sendResponse) {
+  try {
+    await ensureOffscreen();
+    const res = await relayToOffscreen({ type: "OFF_VOICE_START", sessionId, startedAt });
+    sendResponse(res);
+  } catch (err) {
+    console.warn("[Guidr] handleVoiceStart failed:", err);
+    sendResponse({ ok: false, error: "sw-failed", message: err?.message });
+  }
+}
+
+async function handleVoiceStop(sendResponse) {
+  try {
+    const res = await relayToOffscreen({ type: "OFF_VOICE_STOP" });
+    // Close offscreen once recording is done so we don't keep an idle
+    // document around (Chrome may also close it on its own).
+    closeOffscreen().catch(() => {});
+    sendResponse(res);
+  } catch (err) {
+    console.warn("[Guidr] handleVoiceStop failed:", err);
+    sendResponse({ ok: false, error: "sw-failed", message: err?.message });
+  }
+}
+
+async function handleVoiceCancel(sendResponse) {
+  try {
+    const contexts = await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"] });
+    if (contexts.length > 0) {
+      await relayToOffscreen({ type: "OFF_VOICE_CANCEL" });
+      closeOffscreen().catch(() => {});
+    }
+    sendResponse({ ok: true });
+  } catch (err) {
+    console.warn("[Guidr] handleVoiceCancel failed:", err);
+    sendResponse({ ok: false, error: "sw-failed", message: err?.message });
+  }
+}
+
 // ─── Script generation ──────────────────────────────────────────────────────
 
 async function handleGenScript({ sessionId }, sendResponse) {
@@ -290,6 +389,7 @@ async function handleGenScript({ sessionId }, sendResponse) {
 
   const settings = await chrome.storage.local.get(["apiKey", "provider", "model", "openrouterModel", "toneGuide"]);
   if (!settings.apiKey) { sendResponse({ ok: false, error: "No API key configured" }); return; }
+  if (!settings.provider) settings.provider = "gemini";
   if (settings.provider === "openrouter" && settings.openrouterModel) {
     settings.model = settings.openrouterModel;
   }

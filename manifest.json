@@ -13,7 +13,8 @@
     "sidePanel",
     "tabs",
     "downloads",
-    "desktopCapture"
+    "desktopCapture",
+    "offscreen"
   ],
 
   "optional_host_permissions": [

@@ -2,27 +2,31 @@
  * db.js
  * Thin IndexedDB wrapper.
  *
- * Schema (v3):
- *   sessions   — { id, name, tabId, steps: [stepId], createdAt, updatedAt,
- *                  hasRecording, recordingBytes, recordingDurationMs }
- *   steps      — { id, sessionId, index, tsMs, target, url, pageTitle,
- *                  title, body, voiceoverScript, included, mediaMode,
- *                  annotations, enriched, enrichError,
- *                  gifStartMs, gifEndMs, gifFps }
- *   recordings — { id (= sessionId), blob, mimeType, durationMs, byteSize, createdAt }
- *   gifs       — { id (= stepId), sessionId, dataUrl, byteSize,
- *                  startMs, endMs, fps, createdAt }
+ * Schema (v4):
+ *   sessions        — { id, name, tabId, steps: [stepId], createdAt, updatedAt,
+ *                       hasRecording, recordingBytes, recordingDurationMs,
+ *                       hasVoice, voiceBytes, voiceDurationMs }
+ *   steps           — { id, sessionId, index, tsMs, target, url, pageTitle,
+ *                       title, body, voiceoverScript, included, mediaMode,
+ *                       annotations, enriched, enrichError,
+ *                       gifStartMs, gifEndMs, gifFps }
+ *   recordings      — { id (= sessionId), blob, mimeType, durationMs, byteSize, createdAt }
+ *   gifs            — { id (= stepId), sessionId, dataUrl, byteSize,
+ *                       startMs, endMs, fps, createdAt }
+ *   voiceRecordings — { id (= sessionId), blob, mimeType, durationMs, byteSize,
+ *                       sampleRate, deviceLabel, createdAt,
+ *                       transcript, transcriptModel, transcriptCreatedAt }
  *
  * Sessions metadata (no blobs) is mirrored to chrome.storage.local for fast
  * listing without opening IDB.
  *
- * v1 → v2 wiped all data (capture model changed). v2 → v3 is additive: it
- * only creates the new `gifs` store; existing sessions/steps/recordings are
- * preserved.
+ * v1 → v2 wiped all data (capture model changed). v2 → v3 and v3 → v4 are
+ * additive: v3 added the `gifs` store; v4 adds `voiceRecordings`. Existing
+ * sessions/steps/recordings are preserved across both upgrades.
  */
 
 const DB_NAME = "guidr";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -52,6 +56,13 @@ function openDB() {
         // sessionId so deleting a session can sweep its GIFs cheaply.
         const g = db.createObjectStore("gifs", { keyPath: "id" });
         g.createIndex("sessionId", "sessionId");
+      }
+
+      if (oldVersion < 4) {
+        // Additive: per-session mic narration blob, keyed by session id.
+        // Parallel to `recordings` so video and voice can be deleted
+        // independently and so future transcription has a clean audio file.
+        db.createObjectStore("voiceRecordings", { keyPath: "id" });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -109,6 +120,7 @@ export const db = {
     const steps = await this.getStepsForSession(id);
     for (const step of steps) await this.deleteStep(step.id);
     await this.deleteRecording(id);
+    await this.deleteVoiceRecording(id);
     await this.deleteGifsForSession(id);
     const meta = await chrome.storage.local.get("guidr_sessions");
     const list = (meta.guidr_sessions || []).filter((s) => s.id !== id);
@@ -181,6 +193,89 @@ export const db = {
     }
   },
 
+  // ─── Voice recordings (per-session mic blob) ─────────────────────────────
+  // Parallel to `recordings` — kept separate so the user can delete narration
+  // while keeping the video (or vice versa), and so future transcription has
+  // a clean audio file to feed Whisper/Gemini/Anthropic.
+  // The `transcript*` fields ship as null in v1; v2 will fill them.
+
+  async saveVoiceRecording({ sessionId, blob, mimeType, durationMs, sampleRate, deviceLabel }) {
+    const record = {
+      id: sessionId,
+      blob,
+      mimeType,
+      durationMs,
+      byteSize: blob.size,
+      sampleRate: sampleRate ?? null,
+      deviceLabel: deviceLabel ?? null,
+      createdAt: Date.now(),
+      transcript: null,
+      transcriptModel: null,
+      transcriptCreatedAt: null,
+    };
+    await tx("voiceRecordings", "readwrite", (store) => store.put(record));
+    const session = await this.getSession(sessionId);
+    if (session) {
+      session.hasVoice = true;
+      session.voiceBytes = blob.size;
+      session.voiceDurationMs = durationMs;
+      await this.saveSession(session);
+    }
+    return record;
+  },
+
+  async getVoiceRecording(sessionId) {
+    return tx("voiceRecordings", "readonly", (store) => store.get(sessionId));
+  },
+
+  async deleteVoiceRecording(sessionId) {
+    await tx("voiceRecordings", "readwrite", (store) => store.delete(sessionId));
+    const session = await this.getSession(sessionId);
+    if (session && session.hasVoice) {
+      session.hasVoice = false;
+      session.voiceBytes = 0;
+      session.voiceDurationMs = 0;
+      await this.saveSession(session);
+    }
+  },
+
+  // Metadata-only listing for the home-view voice panel. We never want to
+  // pull every blob into memory just to render a list of clips.
+  async getAllVoiceRecordings() {
+    return txAll("voiceRecordings", "readonly", (store, results, resolve, reject) => {
+      const req = store.openCursor();
+      req.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor) {
+          const v = cursor.value;
+          results.push({
+            id: v.id,
+            mimeType: v.mimeType,
+            durationMs: v.durationMs,
+            byteSize: v.byteSize,
+            createdAt: v.createdAt,
+            hasTranscript: !!v.transcript,
+          });
+          cursor.continue();
+        } else {
+          resolve(results.sort((a, b) => b.createdAt - a.createdAt));
+        }
+      };
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  // Forward-compat seam for v2 transcription. Unused in v1.
+  async setVoiceTranscript(sessionId, { transcript, transcriptModel }) {
+    const existing = await this.getVoiceRecording(sessionId);
+    if (!existing) return null;
+    existing.transcript = transcript;
+    existing.transcriptModel = transcriptModel;
+    existing.transcriptCreatedAt = Date.now();
+    await tx("voiceRecordings", "readwrite", (store) => store.put(existing));
+    return existing;
+  },
+
   // ─── GIFs (per-step encoded clip cache) ─────────────────────────────────
   // Encoding a 2–3s GIF takes a few seconds in the worker, so we cache the
   // dataURL keyed by step id. Callers must invalidate when start/end/fps
@@ -245,6 +340,9 @@ async function mirrorSession(session) {
     hasRecording: !!session.hasRecording,
     recordingBytes: session.recordingBytes || 0,
     recordingDurationMs: session.recordingDurationMs || 0,
+    hasVoice: !!session.hasVoice,
+    voiceBytes: session.voiceBytes || 0,
+    voiceDurationMs: session.voiceDurationMs || 0,
   };
   if (idx === -1) list.unshift(entry);
   else list[idx] = entry;

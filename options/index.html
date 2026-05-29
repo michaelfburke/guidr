@@ -327,6 +327,7 @@
     <a href="#" class="active" data-section="provider">Provider</a>
     <a href="#" data-section="tone">Tone of voice</a>
     <a href="#" data-section="examples">Examples</a>
+    <a href="#" data-section="recording">Recording</a>
     <a href="#" data-section="branding">Branding</a>
     <a href="#" data-section="advanced">Advanced</a>
     <div class="spacer"></div>
@@ -494,6 +495,33 @@
     </section>
 
     <!-- BRANDING -->
+    <!-- RECORDING -->
+    <section id="section-recording">
+      <div class="h2-row"><h2>Recording</h2></div>
+      <p class="page-desc">Optional microphone narration. Grant once here — the permission sticks for the whole extension.</p>
+
+      <div class="card">
+        <div class="card-row">
+          <div class="card-row-label">
+            <strong>Microphone access</strong>
+            <span>Grant once for narration.</span>
+          </div>
+          <div class="card-row-content">
+            <p style="margin:0 0 10px;font-size:12px;color:var(--muted);line-height:1.5">
+              Chrome side panels can't show the mic permission prompt directly. Granting here makes narration work from the side panel afterwards.
+            </p>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <button class="btn btn-primary btn-sm" id="enableMicBtn" type="button">Enable microphone</button>
+              <span class="status" id="micStatus"></span>
+            </div>
+            <div style="margin-top:8px;font-size:11px;color:var(--muted);line-height:1.5">
+              Previously blocked? Open <span class="mono">chrome://settings/content/microphone</span> and remove Guidr from the Block list before clicking again.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section id="section-branding">
       <div class="h2-row"><h2>Branding</h2><span class="saved-msg" id="savedBranding">Saved</span></div>
       <p class="page-desc">Customize the colors of the annotations drawn over your screenshots so they match your product's brand. Changes apply to new annotations.</p>

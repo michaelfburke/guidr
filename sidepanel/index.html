@@ -217,6 +217,8 @@
       display: inline-flex; align-items: center; gap: 4px;
     }
     .size-badge.has-vid::before { content: "●"; color: var(--accent); font-size: 9px; }
+    .size-badge.has-voice::before { content: "●"; color: var(--success); font-size: 9px; }
+
     .session-card .overflow-btn {
       opacity: 0; transition: opacity 0.15s;
     }
@@ -270,6 +272,37 @@
     }
     .video-pane.empty { display: none; }
     #srcVideo { width: 100%; display: block; max-height: 240px; background: #000; }
+
+    /* Narration volume overlay — sits over the top-right of the video pane.
+       Subtle by default, fully opaque on hover. Only visible while a guide
+       has narration (toggled by adding `has-voice` to .video-pane). */
+    .narration-vol {
+      position: absolute; top: 8px; right: 8px; z-index: 5;
+      display: none; align-items: center; gap: 6px;
+      background: rgba(0,0,0,0.55);
+      border-radius: 999px;
+      padding: 4px 8px 4px 4px;
+      opacity: 0.5;
+      transition: opacity 0.15s;
+    }
+    .narration-vol[hidden] { display: none !important; }
+    .video-pane:hover .narration-vol,
+    .narration-vol:focus-within { opacity: 1; }
+    .narration-vol .nv-btn {
+      background: transparent; border: none; cursor: pointer;
+      color: #fff; padding: 3px; line-height: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 50%;
+    }
+    .narration-vol .nv-btn:hover { background: rgba(255,255,255,0.12); }
+    .narration-vol .nv-btn .ico { width: 15px; height: 15px; }
+    .narration-vol .nv-btn .nv-ico-off { display: none; }
+    .narration-vol.muted .nv-ico-on  { display: none; }
+    .narration-vol.muted .nv-ico-off { display: inline-block; }
+    .narration-vol input[type="range"] {
+      width: 72px; accent-color: var(--accent);
+      cursor: pointer;
+    }
 
     /* Chapter rail */
     .chapter-rail {
@@ -660,6 +693,29 @@
   </button>
   <input class="topbar-name" id="sessionName" type="text" placeholder="Untitled guide" aria-label="Guide name" autocomplete="off"/>
   <div class="topbar-right">
+    <!-- Session-level actions menu — only visible while a guide is open in
+         the editor view. The items inside are show/hidden by JS based on
+         whether the session has a video track, a voice track, etc. -->
+    <div class="overflow-wrap" id="sessionMoreWrap" style="display:none">
+      <button class="iBtn iBtn-icon" id="sessionMoreBtn" type="button" aria-label="Guide actions" title="Guide actions">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
+      </button>
+      <div class="overflow-menu" id="sessionMoreMenu">
+        <div class="menu-item" id="sessDropVidItem" data-act="drop-vid">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/><path d="m22 8-6 4 6 4V8Z"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+          Remove video (keep text)
+        </div>
+        <div class="menu-item" id="sessDropVoiceItem" data-act="drop-voice">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="2" x2="22" y2="22"/><path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2"/><path d="M5 10v2a7 7 0 0 0 12 5"/><path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+          Remove narration (keep text)
+        </div>
+        <div class="sep" id="sessSep"></div>
+        <div class="menu-item danger" data-act="delete">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          Delete guide
+        </div>
+      </div>
+    </div>
     <button class="iBtn iBtn-icon" id="helpBtn" type="button" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
     <button class="iBtn" id="btn-options">Settings</button>
   </div>
@@ -708,9 +764,20 @@
 ════════════════════════════════ -->
 <div class="view" id="v-editor">
 
-  <!-- Video player -->
+  <!-- Video player. Narration audio is a separate hidden <audio> element
+       bound to this video's transport (see main.js: bindNarrationSync). The
+       overlay in the top-right is the only narration-specific control —
+       Chrome hides the native volume slider for video without an audio
+       track, so we host narration volume here. -->
   <div class="video-pane" id="videoPane">
-    <video id="srcVideo" controls preload="auto" controlsList="nofullscreen nodownload" style="display:none"></video>
+    <video id="srcVideo" controls preload="auto" controlsList="nodownload" style="display:none"></video>
+    <div class="narration-vol" id="narrationVol" hidden>
+      <button class="nv-btn" id="narrationMute" type="button" aria-label="Mute narration" title="Mute narration">
+        <svg class="ico nv-ico-on"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+        <svg class="ico nv-ico-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+      </button>
+      <input type="range" id="narrationVolume" min="0" max="1" step="0.01" value="1" aria-label="Narration volume"/>
+    </div>
   </div>
 
   <!-- Chapter rail -->
@@ -913,6 +980,10 @@
 <!-- Hidden video used for off-screen frame extraction -->
 <video id="extractor" class="hidden-extractor" preload="auto" muted></video>
 <canvas id="extractorCanvas" class="hidden-extractor"></canvas>
+
+<!-- Hidden audio element bound to #srcVideo so narration plays in lockstep
+     with the screen recording through the video's native controls. -->
+<audio id="narrationAudio" preload="metadata" hidden></audio>
 
 <div class="toast" id="toast"></div>
 

@@ -66,6 +66,14 @@ let exampleGuides = [];
 // ── Load ───────────────────────────────────────────────────────────────────
 chrome.storage.local.get(Object.keys(state), (data) => {
   Object.assign(state, data);
+  // First-time use: persist the default provider/model so the service worker
+  // can dispatch enrichment even if the user never explicitly opens this
+  // page (or opens it and only sets the API key). Otherwise llm.js gets a
+  // bare `undefined` provider and throws "Unknown provider: undefined".
+  const seed = {};
+  if (data.provider === undefined) seed.provider = state.provider;
+  if (data.model === undefined)    seed.model    = state.model;
+  if (Object.keys(seed).length) chrome.storage.local.set(seed);
   applyState();
 });
 
@@ -355,6 +363,75 @@ function renderExamples() {
       autoSave({ exampleGuides }, "savedExamples");
     });
   });
+}
+
+// ── Recording / microphone access ──────────────────────────────────────────
+// Chrome side panels can't show the mic permission prompt — getUserMedia
+// rejects with NotAllowedError before any prompt UI appears. The options page
+// is a normal extension tab, so prompts work reliably here. After the user
+// grants once, the permission applies to the entire extension origin
+// (side panel, offscreen, popup — all of them).
+const micBtn    = document.getElementById("enableMicBtn");
+const micStatus = document.getElementById("micStatus");
+
+refreshMicStatus();
+
+micBtn?.addEventListener("click", async () => {
+  micBtn.disabled = true;
+  setMicStatus("Requesting…", "");
+  let stream = null;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // We don't need the stream — just the permission grant. Stop tracks
+    // immediately so the OS mic indicator turns off.
+    stream.getTracks().forEach((t) => t.stop());
+    setMicStatus("Microphone enabled — narration will record from the side panel.", "ok");
+  } catch (err) {
+    console.warn(`[Guidr/options] mic getUserMedia failed: ${err?.name} — ${err?.message}`);
+    if (err?.name === "NotAllowedError") {
+      setMicStatus(
+        "Permission was blocked. Open chrome://settings/content/microphone, remove any Block entry for Guidr, then try again.",
+        "err"
+      );
+    } else if (err?.name === "NotFoundError") {
+      setMicStatus("No microphone detected on this device.", "err");
+    } else {
+      setMicStatus(`Microphone unavailable (${err?.name || "unknown"}).`, "err");
+    }
+  } finally {
+    micBtn.disabled = false;
+    refreshMicStatus();
+  }
+});
+
+async function refreshMicStatus() {
+  if (!micBtn || !micStatus) return;
+  let state = null;
+  try {
+    state = (await navigator.permissions.query({ name: "microphone" })).state;
+  } catch {}
+  if (state === "granted") {
+    micBtn.textContent = "Microphone enabled ✓";
+    micBtn.classList.remove("btn-primary");
+    micBtn.classList.add("btn-ghost");
+    if (!micStatus.textContent) setMicStatus("Microphone enabled — narration will record from the side panel.", "ok");
+  } else if (state === "denied") {
+    micBtn.textContent = "Retry permission";
+    micBtn.classList.add("btn-primary");
+    micBtn.classList.remove("btn-ghost");
+    if (!micStatus.textContent) setMicStatus("Permission is blocked at the browser level. Clear it in chrome://settings/content/microphone first.", "err");
+  } else {
+    micBtn.textContent = "Enable microphone";
+    micBtn.classList.add("btn-primary");
+    micBtn.classList.remove("btn-ghost");
+  }
+}
+
+function setMicStatus(text, kind) {
+  if (!micStatus) return;
+  micStatus.textContent = text;
+  micStatus.classList.remove("ok", "err");
+  if (kind) micStatus.classList.add(kind);
 }
 
 // ── Storage ────────────────────────────────────────────────────────────────
