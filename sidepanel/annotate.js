@@ -202,9 +202,28 @@ export function createAnnotator({ canvas, getFrame, getBrand, getAnnotations, on
   }
 
   function pointToPct(e) {
+    // The canvas uses object-fit: contain, so the pixel buffer is rendered
+    // letterboxed inside the CSS box whenever the box's aspect doesn't match
+    // the buffer's. Mapping clicks against the full CSS box would put
+    // annotations off-center as you move away from the centre — compute the
+    // inner image rect first, then map relative to that.
     const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
+    const bufferAspect = canvas.width / canvas.height;
+    const boxAspect = rect.width / rect.height;
+    let imgW, imgH, imgX, imgY;
+    if (bufferAspect > boxAspect) {
+      imgW = rect.width;
+      imgH = rect.width / bufferAspect;
+      imgX = 0;
+      imgY = (rect.height - imgH) / 2;
+    } else {
+      imgH = rect.height;
+      imgW = rect.height * bufferAspect;
+      imgX = (rect.width - imgW) / 2;
+      imgY = 0;
+    }
+    const x = (e.clientX - rect.left - imgX) / imgW;
+    const y = (e.clientY - rect.top - imgY) / imgH;
     return { x: clamp01(x), y: clamp01(y) };
   }
 
