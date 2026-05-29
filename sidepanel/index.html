@@ -435,8 +435,29 @@
     }
     .gen-btn:hover { background: var(--accent); color: #fff; }
     .gen-btn:disabled { opacity: 0.4; cursor: default; }
+    .gen-btn:disabled:hover { background: var(--accentd); color: var(--text); }
     .gen-btn.secondary { background: none; border-color: var(--border2); color: var(--muted); }
     .gen-btn.secondary:hover { background: var(--s3); color: var(--text); }
+
+    /* Media picker — segmented control. One pill per export mode. */
+    .media-picker {
+      display: flex; gap: 4px; padding: 3px;
+      background: var(--s2); border: 1px solid var(--border2);
+      border-radius: 9px;
+    }
+    .media-pill {
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      gap: 5px; padding: 5px 8px;
+      background: none; border: none; border-radius: 6px;
+      color: var(--muted); font-family: var(--font); font-size: 11px; font-weight: 600;
+      cursor: pointer; transition: all 0.15s; white-space: nowrap;
+    }
+    .media-pill:hover { color: var(--text); background: var(--s3); }
+    .media-pill[aria-checked="true"] {
+      background: var(--accentd); color: var(--text);
+      box-shadow: inset 0 0 0 1px var(--accent);
+    }
+    .media-pill .ico { width: 12px; height: 12px; }
 
     .field-group { position: relative; }
     .field-label {
@@ -454,6 +475,51 @@
       overflow: hidden; min-height: 36px;
     }
     .auto-ta:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,106,247,0.1); }
+
+    /* GIF trim panel — shown only when the step's media mode is "gif". */
+    .gif-panel {
+      background: var(--s2); border: 1px solid var(--border2);
+      border-radius: 8px; padding: 9px 11px; display: flex;
+      flex-direction: column; gap: 8px;
+    }
+    .gif-panel[hidden] { display: none; }
+    .gif-panel-title {
+      font-size: 10px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.1em; color: var(--muted);
+    }
+    .gif-trim-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .gif-trim-row label {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 11px; color: var(--muted);
+    }
+    .gif-trim-row input, .gif-trim-row select {
+      background: var(--s3); border: 1px solid var(--border2); color: var(--text);
+      border-radius: 6px; padding: 3px 6px; font-family: var(--mono); font-size: 11px;
+      width: 64px; outline: none;
+    }
+    .gif-trim-row input:focus, .gif-trim-row select:focus { border-color: var(--accent); }
+    .gif-actions-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .gif-status { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-left: auto; }
+    .gif-status.ok    { color: var(--success); }
+    .gif-status.warn  { color: var(--warn); }
+    .gif-status.err   { color: var(--error); }
+
+    /* Playhead row: primary trim path — scrub the video, hit a button. */
+    .gif-playhead-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 0; border-bottom: 1px dashed var(--border);
+    }
+    .gif-range-readout {
+      flex: 1; text-align: center; font-family: var(--mono); font-size: 11px;
+      color: var(--text);
+    }
+    .gif-trim-row .muted-label { font-size: 10px; }
+    .gif-preview-img {
+      display: block; max-width: 100%; max-height: 180px; margin-top: 4px;
+      border-radius: 6px; border: 1px solid var(--border2);
+      background: var(--s3);
+    }
+    .gif-preview-img[hidden] { display: none; }
 
     /* Navigation footer */
     .editor-footer {
@@ -681,20 +747,70 @@
         <div class="overflow-menu" id="stepMoreMenu">
           <div class="menu-item" id="enrichAllBtn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Enrich all steps with AI</div>
           <div class="sep"></div>
-          <div class="menu-label">Media</div>
-          <select id="stepMedia">
-            <option value="screenshot">Screenshot</option>
-            <option value="none">None</option>
-          </select>
-          <div class="sep"></div>
           <div class="menu-item danger" id="deleteStepBtn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Delete step</div>
         </div>
       </div>
     </div>
 
+    <!-- Media picker — surfaced so users don't have to dig through the overflow menu. -->
+    <div class="media-picker" id="stepMedia" role="radiogroup" aria-label="Step media">
+      <button class="media-pill" type="button" role="radio" data-mode="screenshot" aria-checked="true">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="m21 17-5-5-9 9"/></svg>
+        Screenshot
+      </button>
+      <button class="media-pill" type="button" role="radio" data-mode="gif" aria-checked="false">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z" fill="currentColor"/></svg>
+        GIF
+      </button>
+      <button class="media-pill" type="button" role="radio" data-mode="none" aria-checked="false">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="5" y1="5" x2="19" y2="19"/></svg>
+        No image
+      </button>
+    </div>
+
     <div class="gen-row">
       <button class="gen-btn" id="enrichOneBtn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3m0 12v3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1M3 12h3m12 0h3M5.6 18.4l2.1-2.1m8.6-8.6 2.1-2.1"/></svg> Enrich with AI</button>
       <button class="gen-btn" id="openAnnotBtn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg> Annotate screenshot</button>
+    </div>
+
+    <!-- GIF trim panel — visible only when this step's media is set to GIF. -->
+    <div class="gif-panel" id="gifPanel" hidden>
+      <div class="gif-panel-title">GIF clip range</div>
+
+      <!-- Playhead-driven trim: scrub the video above, then anchor start/end. -->
+      <div class="gif-playhead-row">
+        <button class="gen-btn secondary" id="gifSetStartBtn" type="button" title="Use the video's current time as the clip start">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="4" x2="5" y2="20"/><polygon points="10 5 19 12 10 19" fill="currentColor"/></svg>
+          Start here
+        </button>
+        <span class="gif-range-readout" id="gifRangeReadout">0.0s → 0.0s · 0.0s clip</span>
+        <button class="gen-btn secondary" id="gifSetEndBtn" type="button" title="Use the video's current time as the clip end">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 5 14 12 5 19" fill="currentColor"/><line x1="19" y1="4" x2="19" y2="20"/></svg>
+          End here
+        </button>
+      </div>
+
+      <!-- Fine-tune numeric inputs (de-emphasised — playhead buttons are the primary path). -->
+      <div class="gif-trim-row">
+        <label class="muted-label">Fine-tune start<input type="number" id="gifStart" step="0.1" min="0" value="0"/></label>
+        <label class="muted-label">Fine-tune end<input type="number" id="gifEnd" step="0.1" min="0" value="0"/></label>
+        <label class="muted-label">FPS
+          <select id="gifFps">
+            <option value="5">5</option>
+            <option value="10" selected>10</option>
+            <option value="15">15</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="gif-actions-row">
+        <button class="gen-btn secondary" id="gifPreviewBtn" type="button">Preview clip</button>
+        <button class="gen-btn" id="gifGenerateBtn" type="button">Generate GIF</button>
+        <span class="gif-status" id="gifStatus">Not generated yet</span>
+      </div>
+
+      <!-- Inline preview of the encoded GIF so users can confirm before export. -->
+      <img class="gif-preview-img" id="gifPreviewImg" alt="" hidden/>
     </div>
 
     <div class="field-group">
@@ -811,6 +927,8 @@
   </div>
 </div>
 
+<!-- gif.js (MIT, https://github.com/jnordberg/gif.js) — exposes window.GIF for the encoder. -->
+<script src="../vendor/gif.js"></script>
 <script type="module" src="main.js"></script>
 </body>
 </html>

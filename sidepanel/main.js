@@ -35,7 +35,6 @@ const chapterRail  = $("chapterRail");
 const stepSkipToggle = $("stepSkipToggle");
 const stepMoreBtn    = $("stepMoreBtn");
 const stepMoreMenu   = $("stepMoreMenu");
-const stepMedia    = $("stepMedia");
 const stepTs       = $("stepTs");
 const stepTitle    = $("stepTitle");
 const stepBody     = $("stepBody");
@@ -46,6 +45,30 @@ const exportBtn        = $("exportBtn");
 const exportMenu       = $("exportMenu");
 const extractor    = $("extractor");
 const extractorCanvas = $("extractorCanvas");
+const openAnnotBtn   = $("openAnnotBtn");
+const gifPanel       = $("gifPanel");
+const gifStart       = $("gifStart");
+const gifEnd         = $("gifEnd");
+const gifFps         = $("gifFps");
+const gifPreviewBtn  = $("gifPreviewBtn");
+const gifGenerateBtn = $("gifGenerateBtn");
+const gifStatus      = $("gifStatus");
+const gifSetStartBtn = $("gifSetStartBtn");
+const gifSetEndBtn   = $("gifSetEndBtn");
+const gifRangeReadout = $("gifRangeReadout");
+const gifPreviewImg  = $("gifPreviewImg");
+const mediaPills     = document.querySelectorAll(".media-pill[data-mode]");
+
+// Cap auto-encoded GIFs at this width — full-HD recordings encoded at native
+// resolution produce 10–30MB GIFs that some renderers (Intercom in particular)
+// refuse to inline. 1280px is plenty for help-center / Notion docs.
+const GIF_MAX_WIDTH = 1280;
+// Warn the user above this raw size — they may want a shorter clip / lower fps.
+const GIF_SIZE_WARN_BYTES = 3 * 1024 * 1024;
+
+// GIF preview/encode state
+let gifPreviewStopTimer = null;
+let gifEncoding = false;
 
 // ── Boot ───────────────────────────────────────────────────────────────────
 loadSessions();
@@ -589,7 +612,9 @@ function loadStepIntoEditor(idx) {
 
   loadStepFields(step);
   applySkipToggleState(step.included !== false);
-  stepMedia.value = step.mediaMode || "screenshot";
+  setActiveMediaPill(step.mediaMode || "screenshot");
+  refreshGifPanel(step);
+  updateAnnotateButtonState(step);
   stepTs.textContent = formatMs(step.tsMs);
 
   prevBtn.disabled = idx === 0;
@@ -631,12 +656,229 @@ stepSkipToggle.addEventListener("click", () => {
   saveCurrentStep();
 });
 
-stepMedia.addEventListener("change", () => {
+function setActiveMediaPill(mode) {
+  mediaPills.forEach((p) => p.setAttribute("aria-checked", p.dataset.mode === mode ? "true" : "false"));
+}
+
+function updateAnnotateButtonState(step) {
+  const disabled = step.mediaMode === "gif";
+  openAnnotBtn.disabled = disabled;
+  openAnnotBtn.title = disabled
+    ? "Annotations apply to screenshot steps only"
+    : "";
+}
+
+mediaPills.forEach((p) => {
+  p.addEventListener("click", () => {
+    const step = steps[currentStepIdx];
+    if (!step) return;
+    const mode = p.dataset.mode;
+    if (step.mediaMode === mode) return;
+    step.mediaMode = mode;
+    if (mode === "gif") ensureGifDefaults(step);
+    setActiveMediaPill(mode);
+    refreshGifPanel(step);
+    updateAnnotateButtonState(step);
+    saveCurrentStep();
+  });
+});
+
+// ── GIF clip controls ──────────────────────────────────────────────────────
+// Default window: from the previous step's click to this one ("show the
+// action that led up to this click"), but capped at 5s so long pauses
+// between steps don't produce 30-second GIFs.
+function ensureGifDefaults(step) {
+  if (step.gifStartMs == null || step.gifEndMs == null) {
+    const idx = steps.indexOf(step);
+    const prev = idx > 0 ? steps[idx - 1] : null;
+    const naiveStart = prev ? prev.tsMs : Math.max(0, step.tsMs - 2000);
+    const cappedStart = Math.max(naiveStart, step.tsMs - 5000);
+    step.gifStartMs = Math.max(0, cappedStart);
+    step.gifEndMs   = step.tsMs;
+  }
+  if (!step.gifFps) step.gifFps = 10;
+}
+
+function refreshGifPanel(step) {
+  const isGif = step.mediaMode === "gif";
+  gifPanel.hidden = !isGif;
+  if (!isGif) return;
+  ensureGifDefaults(step);
+  gifStart.value = (step.gifStartMs / 1000).toFixed(1);
+  gifEnd.value   = (step.gifEndMs   / 1000).toFixed(1);
+  gifFps.value   = String(step.gifFps || 10);
+  const startS = (step.gifStartMs / 1000).toFixed(1);
+  const endS   = (step.gifEndMs   / 1000).toFixed(1);
+  const durS   = ((step.gifEndMs - step.gifStartMs) / 1000).toFixed(1);
+  gifRangeReadout.textContent = `${startS}s → ${endS}s · ${durS}s clip`;
+  updateGifStatus(step);
+  refreshGifPreviewImg(step);
+}
+
+async function refreshGifPreviewImg(step) {
+  const cached = await db.getGif(step.id).catch(() => null);
+  const matches = cached
+    && cached.startMs === step.gifStartMs
+    && cached.endMs   === step.gifEndMs
+    && cached.fps     === (step.gifFps || 10);
+  if (matches) {
+    gifPreviewImg.src = cached.dataUrl;
+    gifPreviewImg.hidden = false;
+  } else {
+    gifPreviewImg.removeAttribute("src");
+    gifPreviewImg.hidden = true;
+  }
+}
+
+// Data-URL length → approximate decoded byte count. Base64 expands by 4/3
+// and includes a small "data:image/gif;base64," prefix; close enough for a
+// user-facing size readout. (formatBytes lives further down — reused from
+// the session list size badges.)
+function approxBase64ByteSize(dataUrl) {
+  const comma = dataUrl.indexOf(",");
+  const b64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+  return Math.floor((b64.length * 3) / 4);
+}
+
+function setGifStatus(text, cls = "") {
+  gifStatus.textContent = text;
+  gifStatus.className = "gif-status" + (cls ? " " + cls : "");
+}
+
+async function updateGifStatus(step) {
+  if (gifEncoding) return;
+  try {
+    const cached = await db.getGif(step.id);
+    if (!cached) { setGifStatus("Not generated yet"); return; }
+    const matches =
+      cached.startMs === step.gifStartMs &&
+      cached.endMs   === step.gifEndMs &&
+      cached.fps     === (step.gifFps || 10);
+    if (!matches) { setGifStatus("Stale — click Generate to refresh", "warn"); return; }
+    const bytes = approxBase64ByteSize(cached.dataUrl);
+    if (bytes > GIF_SIZE_WARN_BYTES) {
+      setGifStatus(`Large · ${formatBytes(bytes)} — try lower fps or shorter clip`, "warn");
+    } else {
+      setGifStatus(`Ready · ${formatBytes(bytes)}`, "ok");
+    }
+  } catch {
+    setGifStatus("Not generated yet");
+  }
+}
+
+let gifTrimSaveTimer;
+[gifStart, gifEnd, gifFps].forEach((el) => {
+  el.addEventListener("input", () => {
+    const step = steps[currentStepIdx];
+    if (!step || step.mediaMode !== "gif") return;
+    const s = parseFloat(gifStart.value) * 1000;
+    const e = parseFloat(gifEnd.value)   * 1000;
+    const f = parseInt(gifFps.value, 10);
+    if (Number.isFinite(s)) step.gifStartMs = Math.max(0, Math.round(s));
+    if (Number.isFinite(e)) step.gifEndMs   = Math.max(step.gifStartMs + 100, Math.round(e));
+    if (Number.isFinite(f) && f > 0) step.gifFps = f;
+    // Window/fps change invalidates any cached encode.
+    db.clearGif(step.id).catch(() => {});
+    updateGifStatus(step);
+    clearTimeout(gifTrimSaveTimer);
+    gifTrimSaveTimer = setTimeout(saveCurrentStep, 500);
+  });
+});
+
+gifSetStartBtn.addEventListener("click", () => {
   const step = steps[currentStepIdx];
-  if (!step) return;
-  step.mediaMode = stepMedia.value;
+  if (!step || step.mediaMode !== "gif" || !srcVideo.src) return;
+  const ms = Math.max(0, Math.round(srcVideo.currentTime * 1000));
+  // Keep at least 100ms of clip — clamp against the end.
+  step.gifStartMs = Math.min(ms, (step.gifEndMs ?? ms + 100) - 100);
+  db.clearGif(step.id).catch(() => {});
+  refreshGifPanel(step);
   saveCurrentStep();
 });
+
+gifSetEndBtn.addEventListener("click", () => {
+  const step = steps[currentStepIdx];
+  if (!step || step.mediaMode !== "gif" || !srcVideo.src) return;
+  const ms = Math.max(0, Math.round(srcVideo.currentTime * 1000));
+  step.gifEndMs = Math.max(ms, (step.gifStartMs ?? 0) + 100);
+  db.clearGif(step.id).catch(() => {});
+  refreshGifPanel(step);
+  saveCurrentStep();
+});
+
+gifPreviewBtn.addEventListener("click", async () => {
+  const step = steps[currentStepIdx];
+  if (!step || step.mediaMode !== "gif") return;
+  if (!srcVideo.src) { errorToast("No recording loaded"); return; }
+  try {
+    srcVideo.currentTime = Math.max(0, step.gifStartMs / 1000);
+    await srcVideo.play();
+    if (gifPreviewStopTimer) clearTimeout(gifPreviewStopTimer);
+    gifPreviewStopTimer = setTimeout(() => {
+      try { srcVideo.pause(); } catch {}
+    }, Math.max(0, step.gifEndMs - step.gifStartMs));
+  } catch (e) {
+    errorToast("Preview failed: " + e.message);
+  }
+});
+
+gifGenerateBtn.addEventListener("click", async () => {
+  const step = steps[currentStepIdx];
+  if (!step || step.mediaMode !== "gif") return;
+  if (!extractor.src) { errorToast("No recording loaded"); return; }
+  if (gifEncoding) return;
+  try {
+    await encodeAndCacheGif(step);
+    toast("GIF generated");
+  } catch (e) {
+    errorToast("GIF generation failed: " + e.message);
+    setGifStatus("Failed — try again", "err");
+  }
+});
+
+async function encodeAndCacheGif(step) {
+  gifEncoding = true;
+  gifGenerateBtn.disabled = true;
+  setGifStatus("Encoding…");
+  try {
+    const dataUrl = await extractGifClip(step.gifStartMs, step.gifEndMs, step.gifFps || 10);
+    await db.saveGif({
+      stepId: step.id,
+      sessionId: currentSessionId,
+      dataUrl,
+      startMs: step.gifStartMs,
+      endMs:   step.gifEndMs,
+      fps:     step.gifFps || 10,
+    });
+    // Only refresh the inline preview if the user is still on this step — if
+    // they navigated away mid-encode (export-time path), don't clobber the
+    // visible step's preview.
+    if (steps[currentStepIdx]?.id === step.id) refreshGifPreviewImg(step);
+    const bytes = approxBase64ByteSize(dataUrl);
+    if (bytes > GIF_SIZE_WARN_BYTES) {
+      setGifStatus(`Large · ${formatBytes(bytes)} — try lower fps or shorter clip`, "warn");
+    } else {
+      setGifStatus(`Ready · ${formatBytes(bytes)}`, "ok");
+    }
+    return dataUrl;
+  } finally {
+    gifEncoding = false;
+    gifGenerateBtn.disabled = false;
+  }
+}
+
+async function getOrEncodeGif(step) {
+  const cached = await db.getGif(step.id);
+  if (
+    cached &&
+    cached.startMs === step.gifStartMs &&
+    cached.endMs   === step.gifEndMs &&
+    cached.fps     === (step.gifFps || 10)
+  ) {
+    return cached.dataUrl;
+  }
+  return encodeAndCacheGif(step);
+}
 
 // Overflow menu open/close
 stepMoreBtn.addEventListener("click", (e) => {
@@ -658,6 +900,9 @@ async function saveCurrentStep() {
     included: step.included !== false,
     mediaMode: step.mediaMode || "screenshot",
     annotations: step.annotations || [],
+    gifStartMs: step.gifStartMs,
+    gifEndMs:   step.gifEndMs,
+    gifFps:     step.gifFps,
   };
   Object.assign(step, updates);
   await sw({ type: "SP_UPDATE_STEP", stepId: step.id, updates });
@@ -858,6 +1103,10 @@ document.querySelectorAll(".annot-tool[data-hint]").forEach((btn) => {
 async function openAnnotPaneForCurrentStep() {
   const step = steps[currentStepIdx];
   if (!step) return;
+  if (step.mediaMode === "gif") {
+    toast("Annotations apply to screenshot steps only — switch this step to Screenshot to annotate", 4500);
+    return;
+  }
   if (!extractor.src) {
     errorToast("No recording loaded — annotations need a video frame to draw on.");
     return;
@@ -938,35 +1187,99 @@ async function waitForExtractorReady() {
 function extractFrame(tsMs) {
   const job = () => (async () => {
     await waitForExtractorReady();
+    await seekExtractor(tsMs / 1000);
+    const w = extractor.videoWidth;
+    const h = extractor.videoHeight;
+    extractorCanvas.width = w;
+    extractorCanvas.height = h;
+    extractorCanvas.getContext("2d").drawImage(extractor, 0, 0, w, h);
+    return extractorCanvas.toDataURL("image/jpeg", 0.85);
+  })();
+  extractChain = extractChain.then(job, job);
+  return extractChain;
+}
+
+// Seek the hidden extractor to `targetSec` and wait until it's at rest.
+// Some MediaRecorder webms have malformed duration metadata and never fire
+// `seeked` near the end, so we cap the wait and resolve with whatever frame
+// is on the element.
+function seekExtractor(targetSec) {
+  return new Promise((resolve, reject) => {
+    const onSeeked = () => {
+      extractor.removeEventListener("seeked", onSeeked);
+      extractor.removeEventListener("error", onErr);
+      resolve();
+    };
+    const onErr = () => {
+      extractor.removeEventListener("seeked", onSeeked);
+      extractor.removeEventListener("error", onErr);
+      reject(new Error("Extractor error during seek"));
+    };
+    extractor.addEventListener("seeked", onSeeked, { once: true });
+    extractor.addEventListener("error",  onErr,    { once: true });
+    setTimeout(() => { if (!extractor.seeking) onSeeked(); }, 1500);
+    extractor.currentTime = Math.max(0, targetSec);
+  });
+}
+
+// Encode an animated GIF clip from the recording by seeking the extractor
+// once per frame and feeding each into a gif.js encoder running in a worker.
+// Returns a `data:image/gif;base64,...` URL ready to embed in Markdown/HTML.
+function extractGifClip(startMs, endMs, fps) {
+  const job = () => (async () => {
+    await waitForExtractorReady();
+    if (typeof window.GIF !== "function") {
+      throw new Error("GIF encoder not loaded (vendor/gif.js missing)");
+    }
+    // Auto-downscale source resolution to keep file sizes reasonable. Native
+    // 1920x1080 screen recordings produce 15–30MB GIFs that Intercom and other
+    // help-center renderers refuse to inline as data URLs.
+    const sourceW = extractor.videoWidth;
+    const sourceH = extractor.videoHeight;
+    const scale = sourceW > GIF_MAX_WIDTH ? GIF_MAX_WIDTH / sourceW : 1;
+    const w = Math.max(1, Math.round(sourceW * scale));
+    const h = Math.max(1, Math.round(sourceH * scale));
+    const safeFps = Math.max(1, Math.min(30, fps || 10));
+    const delay = Math.round(1000 / safeFps);
+    const frameTimes = [];
+    for (let t = startMs; t < endMs; t += delay) frameTimes.push(t);
+    if (!frameTimes.length || frameTimes[frameTimes.length - 1] < endMs) {
+      frameTimes.push(endMs);
+    }
+
+    const gif = new window.GIF({
+      workers: 2,
+      quality: 10,
+      width: w,
+      height: h,
+      workerScript: chrome.runtime.getURL("vendor/gif.worker.js"),
+    });
+
+    extractorCanvas.width = w;
+    extractorCanvas.height = h;
+    const ctx = extractorCanvas.getContext("2d");
+
+    for (let i = 0; i < frameTimes.length; i++) {
+      await seekExtractor(frameTimes[i] / 1000);
+      ctx.drawImage(extractor, 0, 0, w, h);
+      // `copy: true` snapshots the canvas pixels right now — without it
+      // gif.js would read every frame from the same canvas after our loop
+      // ends and produce N copies of the last frame.
+      gif.addFrame(extractorCanvas, { copy: true, delay });
+      setGifStatus(`Capturing frame ${i + 1}/${frameTimes.length}…`);
+    }
+
     return new Promise((resolve, reject) => {
-      const target = Math.max(0, tsMs / 1000);
-      const onSeeked = () => {
-        extractor.removeEventListener("seeked", onSeeked);
-        extractor.removeEventListener("error", onErr);
-        try {
-          const w = extractor.videoWidth;
-          const h = extractor.videoHeight;
-          extractorCanvas.width = w;
-          extractorCanvas.height = h;
-          const ctx = extractorCanvas.getContext("2d");
-          ctx.drawImage(extractor, 0, 0, w, h);
-          resolve(extractorCanvas.toDataURL("image/jpeg", 0.85));
-        } catch (e) { reject(e); }
-      };
-      const onErr = (e) => {
-        extractor.removeEventListener("seeked", onSeeked);
-        extractor.removeEventListener("error", onErr);
-        reject(new Error("Extractor error during seek"));
-      };
-      extractor.addEventListener("seeked", onSeeked, { once: true });
-      extractor.addEventListener("error", onErr, { once: true });
-      // Safety net: some webms don't fire `seeked` reliably if the requested
-      // time is past a malformed duration boundary. Time out and resolve
-      // with whatever frame is currently on the extractor.
-      setTimeout(() => {
-        if (!extractor.seeking) onSeeked();
-      }, 1500);
-      extractor.currentTime = target;
+      gif.on("progress", (p) => {
+        setGifStatus(`Encoding… ${Math.round(p * 100)}%`);
+      });
+      gif.on("finished", (blob) => {
+        const reader = new FileReader();
+        reader.onload  = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error("Failed to read GIF blob"));
+        reader.readAsDataURL(blob);
+      });
+      try { gif.render(); } catch (err) { reject(err); }
     });
   })();
   extractChain = extractChain.then(job, job);
@@ -1039,7 +1352,15 @@ async function doDocumentExport(fmt, action = "download") {
   const hydrated = [];
   for (const step of included) {
     let screenshot = null;
-    if (step.mediaMode !== "none" && extractor.src) {
+    if (step.mediaMode === "gif" && extractor.src) {
+      try {
+        screenshot = await getOrEncodeGif(step);
+        console.log("[Guidr] export: gif for step", step.index, "·", Math.round((screenshot?.length || 0) / 1024), "KB");
+      } catch (err) {
+        console.warn("[Guidr] export: gif encoding failed for step", step.index, ":", err.message);
+      }
+      // Annotations are intentionally not composited onto GIFs.
+    } else if (step.mediaMode !== "none" && extractor.src) {
       try {
         screenshot = await extractFrame(step.tsMs);
         if (step.annotations && step.annotations.length) {

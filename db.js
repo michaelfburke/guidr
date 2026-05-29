@@ -2,44 +2,57 @@
  * db.js
  * Thin IndexedDB wrapper.
  *
- * Schema (v2):
+ * Schema (v3):
  *   sessions   — { id, name, tabId, steps: [stepId], createdAt, updatedAt,
  *                  hasRecording, recordingBytes, recordingDurationMs }
  *   steps      — { id, sessionId, index, tsMs, target, url, pageTitle,
  *                  title, body, voiceoverScript, included, mediaMode,
- *                  annotations, enriched, enrichError }
+ *                  annotations, enriched, enrichError,
+ *                  gifStartMs, gifEndMs, gifFps }
  *   recordings — { id (= sessionId), blob, mimeType, durationMs, byteSize, createdAt }
+ *   gifs       — { id (= stepId), sessionId, dataUrl, byteSize,
+ *                  startMs, endMs, fps, createdAt }
  *
  * Sessions metadata (no blobs) is mirrored to chrome.storage.local for fast
  * listing without opening IDB.
  *
- * Upgrading from v1 wipes all prior data — the capture model has changed
- * (no more before/after screenshots; the source of truth is now a video
- * recording per session), so v1 records can't be played in the new UI.
+ * v1 → v2 wiped all data (capture model changed). v2 → v3 is additive: it
+ * only creates the new `gifs` store; existing sessions/steps/recordings are
+ * preserved.
  */
 
 const DB_NAME = "guidr";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 function openDB() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = (e) => {
       const db = e.target.result;
-      // Drop any pre-existing stores (v1 had screenshots inside steps).
-      for (const name of [...db.objectStoreNames]) db.deleteObjectStore(name);
+      const oldVersion = e.oldVersion || 0;
 
-      const ss = db.createObjectStore("sessions", { keyPath: "id" });
-      ss.createIndex("createdAt", "createdAt");
+      if (oldVersion < 2) {
+        // Fresh install or v1 → drop everything (v1 had screenshots inside
+        // steps, incompatible with the video-centric model).
+        for (const name of [...db.objectStoreNames]) db.deleteObjectStore(name);
 
-      const st = db.createObjectStore("steps", { keyPath: "id" });
-      st.createIndex("sessionId", "sessionId");
+        const ss = db.createObjectStore("sessions", { keyPath: "id" });
+        ss.createIndex("createdAt", "createdAt");
 
-      db.createObjectStore("recordings", { keyPath: "id" });
+        const st = db.createObjectStore("steps", { keyPath: "id" });
+        st.createIndex("sessionId", "sessionId");
 
-      // Clear the chrome.storage.local mirror so the home view doesn't show
-      // dangling references to v1 sessions that no longer exist in IDB.
-      chrome.storage.local.remove("guidr_sessions").catch(() => {});
+        db.createObjectStore("recordings", { keyPath: "id" });
+
+        chrome.storage.local.remove("guidr_sessions").catch(() => {});
+      }
+
+      if (oldVersion < 3) {
+        // Additive: per-step encoded GIF cache, keyed by step id. Indexed by
+        // sessionId so deleting a session can sweep its GIFs cheaply.
+        const g = db.createObjectStore("gifs", { keyPath: "id" });
+        g.createIndex("sessionId", "sessionId");
+      }
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -96,6 +109,7 @@ export const db = {
     const steps = await this.getStepsForSession(id);
     for (const step of steps) await this.deleteStep(step.id);
     await this.deleteRecording(id);
+    await this.deleteGifsForSession(id);
     const meta = await chrome.storage.local.get("guidr_sessions");
     const list = (meta.guidr_sessions || []).filter((s) => s.id !== id);
     await chrome.storage.local.set({ guidr_sessions: list });
@@ -126,6 +140,7 @@ export const db = {
 
   async deleteStep(id) {
     await tx("steps", "readwrite", (store) => store.delete(id));
+    await tx("gifs", "readwrite", (store) => store.delete(id)).catch(() => {});
   },
 
   // ─── Recordings (per-session webm blob) ─────────────────────────────────
@@ -164,6 +179,45 @@ export const db = {
       session.recordingDurationMs = 0;
       await this.saveSession(session);
     }
+  },
+
+  // ─── GIFs (per-step encoded clip cache) ─────────────────────────────────
+  // Encoding a 2–3s GIF takes a few seconds in the worker, so we cache the
+  // dataURL keyed by step id. Callers must invalidate when start/end/fps
+  // change (see clearGif below).
+
+  async saveGif({ stepId, sessionId, dataUrl, startMs, endMs, fps }) {
+    const record = {
+      id: stepId,
+      sessionId,
+      dataUrl,
+      byteSize: dataUrl.length,
+      startMs, endMs, fps,
+      createdAt: Date.now(),
+    };
+    await tx("gifs", "readwrite", (store) => store.put(record));
+    return record;
+  },
+
+  async getGif(stepId) {
+    return tx("gifs", "readonly", (store) => store.get(stepId));
+  },
+
+  async clearGif(stepId) {
+    await tx("gifs", "readwrite", (store) => store.delete(stepId));
+  },
+
+  async deleteGifsForSession(sessionId) {
+    await txAll("gifs", "readwrite", (store, _results, resolve, reject) => {
+      const index = store.index("sessionId");
+      const req = index.openCursor(IDBKeyRange.only(sessionId));
+      req.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor) { cursor.delete(); cursor.continue(); }
+        else resolve();
+      };
+      req.onerror = () => reject(req.error);
+    });
   },
 
   // ─── Housekeeping ───────────────────────────────────────────────────────

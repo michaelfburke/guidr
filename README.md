@@ -17,6 +17,8 @@ guidr-extension/
 ├── llm.js                 LLM enrichment (Anthropic, OpenAI, Gemini, OpenRouter)
 ├── db.js                  IndexedDB wrapper (sessions + steps with screenshots)
 ├── export.js              Export to Markdown, HTML, Intercom JSON, raw JSON
+├── vendor/
+│   └── gif.js             Local copy of gif.js (used for per-step GIF clips)
 ├── sidepanel/
 │   └── index.html         Side panel UI (recording, step list, export)
 └── options/
@@ -69,6 +71,16 @@ End with the outcome where relevant: "...to open the dashboard."
 ### Example guides
 Add up to 3 example step title/body pairs in Settings.
 These are used as few-shot examples in the system prompt.
+
+---
+
+## Per-step media
+
+Each step exports as one of:
+
+- **Screenshot** (default) — a still frame from the recording at the moment of the click. Supports annotations (circles, arrows, highlights, masks).
+- **Animated GIF** — a short clip from the recording. Pick the start/end seconds and frame rate (5/10/15 fps) in the step's media panel, hit **Generate GIF**, and the encoded clip embeds in any export format. GIF steps don't support annotations — switch back to Screenshot to add them. Encoded clips are cached in IndexedDB so re-exports are instant.
+- **None** — skip the visual for this step.
 
 ---
 
