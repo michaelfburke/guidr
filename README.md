@@ -15,8 +15,8 @@ guidr-extension/
 ├── content_script.js      Injected on demand by the SW during recording — captures clicks + DOM context
 ├── service_worker.js      Background SW — orchestrates capture, LLM, storage
 ├── llm.js                 LLM enrichment (Anthropic, OpenAI, Gemini, OpenRouter)
-├── db.js                  IndexedDB wrapper (sessions + steps with screenshots)
-├── export.js              Export to Markdown, HTML, Intercom JSON, raw JSON
+├── db.js                  IndexedDB wrapper (sessions + steps + recordings + GIF cache)
+├── export.js              Export to Markdown, HTML, Intercom allowlist HTML, raw JSON
 ├── vendor/
 │   └── gif.js             Local copy of gif.js (used for per-step GIF clips)
 ├── sidepanel/
@@ -76,11 +76,11 @@ These are used as few-shot examples in the system prompt.
 
 ## Per-step media
 
-Each step exports as one of:
+Each step exports as one of three modes, picked from a segmented control at the top of the step panel:
 
 - **Screenshot** (default) — a still frame from the recording at the moment of the click. Supports annotations (circles, arrows, highlights, masks).
-- **Animated GIF** — a short clip from the recording. Pick the start/end seconds and frame rate (5/10/15 fps) in the step's media panel, hit **Generate GIF**, and the encoded clip embeds in any export format. GIF steps don't support annotations — switch back to Screenshot to add them. Encoded clips are cached in IndexedDB so re-exports are instant.
-- **None** — skip the visual for this step.
+- **Animated GIF** — a short clip from the recording. Scrub the video to where you want the clip to start, hit **Start here**, scrub to where it should end, hit **End here**, pick a frame rate (5/10/15 fps), then **Generate GIF**. The encoded clip previews inline and embeds in any export format. Output is auto-downscaled to 1280px wide so Intercom and other help-center renderers accept it; a size warning appears if the result is still over ~3 MB. GIF steps don't support annotations — switch back to Screenshot to add them. Encoded clips are cached in IndexedDB so re-exports are instant.
+- **No image** — skip the visual for this step.
 
 ---
 
@@ -112,11 +112,14 @@ Full session backup including all metadata (no screenshots). Use to import into 
 ## Storage
 
 - **API key + settings**: `chrome.storage.local` (sandboxed to the extension)
-- **Sessions metadata**: `chrome.storage.local` (fast listing)
-- **Steps + screenshots**: IndexedDB (no size limit, survives browser restarts)
+- **Sessions metadata mirror**: `chrome.storage.local` (fast home-view listing, no blobs)
+- **WebM recordings, step metadata, cached GIFs**: IndexedDB (no fixed cap, survives browser restarts)
 
-Estimated storage: ~200KB per step with screenshot. 50-step guide ≈ 10MB.
-The extension warns when IndexedDB usage exceeds 500MB. Old sessions can be archived/deleted.
+The source of truth for each session is a single WebM blob from `MediaRecorder`; per-click step records hold only metadata (timestamps, target info, title/body). Screenshots are derived on-demand from the WebM at export time, and GIFs (when used) are encoded once and cached. Typical sizes:
+
+- Recording: ~3–6 MB per minute at 1080p, 4 Mbps.
+- Step metadata: a few KB each.
+- Cached GIF: a few hundred KB to a few MB per step depending on length and fps.
 
 ---
 
