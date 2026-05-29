@@ -10,9 +10,9 @@
     :root {
       --bg:       #09090e;
       --s1:       #111118;
-      --s2:       #191921;
-      --border:   #23232f;
-      --border2:  #2e2e3d;
+      --s2:       #17171f;
+      --border:   #222230;
+      --border2:  #2b2b3a;
       --accent:   #7c6af7;
       --accent2:  #a89af9;
       --success:  #34d399;
@@ -32,6 +32,21 @@
       font-family: var(--font);
       line-height: 1.55;
       min-height: 100vh;
+    }
+
+    /* Visible focus on dark backgrounds — never rely on the browser default. */
+    :focus { outline: none; }
+    button:focus-visible, a:focus-visible, input:focus-visible,
+    select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    /* Brand period motif — echoes the purple dot in the Guidr. logo. */
+    .section-title::before {
+      content: ""; display: inline-block; width: 5px; height: 5px;
+      border-radius: 50%; background: var(--accent);
+      margin-right: 7px; vertical-align: 1px;
     }
 
     /* ── Layout ── */
@@ -221,16 +236,38 @@
       width: 100%; max-width: 420px; background: var(--s2);
       border-radius: 8px; border: 1px solid var(--border); display: block;
     }
-
-    /* ── Save bar ── */
-    .save-bar {
-      position: sticky; bottom: 0;
-      background: linear-gradient(to top, var(--bg) 60%, transparent);
-      padding: 24px 0 0; margin-top: 12px;
-      display: flex; align-items: center; gap: 14px;
+    .branding-grid {
+      display: grid; grid-template-columns: 1fr; gap: 16px;
+      align-items: start;
     }
-    .saved-msg { color: var(--success); font-size: 12px; opacity: 0; transition: opacity 0.3s; }
+    @media (min-width: 920px) {
+      main { max-width: 880px; }
+      .branding-grid { grid-template-columns: 1fr 320px; }
+    }
+    .branding-preview {
+      position: sticky; top: 20px;
+      background: var(--s1); border: 1px solid var(--border);
+      border-radius: var(--r); padding: 16px;
+    }
+    .branding-preview-label {
+      font-size: 11px; font-weight: 600; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--muted); margin-bottom: 10px;
+    }
+    .branding-preview canvas { width: 100%; height: auto; max-width: 100%; }
+
+    /* Inline auto-save indicator */
+    .saved-msg {
+      color: var(--success); font-size: 11px; font-weight: 500;
+      opacity: 0; transition: opacity 0.3s;
+      display: inline-flex; align-items: center; gap: 4px;
+      margin-left: 8px;
+    }
     .saved-msg.show { opacity: 1; }
+    .saved-msg::before { content: "✓"; }
+    .h2-row { display: flex; align-items: baseline; gap: 6px; margin-bottom: 6px; }
+    .h2-row h2 { margin: 0; }
+    .key-note { color: var(--muted); font-size: 11px; margin-top: 6px; }
+    .key-note.warn { color: var(--warn); }
 
     /* ── Spinner ── */
     .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(124,106,247,0.3);
@@ -246,6 +283,39 @@
     a.link { color: var(--accent2); text-decoration: none; font-size: 12px; }
     a.link:hover { text-decoration: underline; }
     code { font-family: var(--mono); font-size: 11px; background: var(--s2); padding: 2px 6px; border-radius: 4px; }
+
+    /* Inline SVG icon defaults */
+    .ico { width: 14px; height: 14px; flex-shrink: 0; vertical-align: -0.15em; display: inline-block; }
+    .ico-inline { width: 13px; height: 13px; margin-right: 4px; color: var(--muted); }
+
+    /* In-page confirm modal */
+    .modal-backdrop {
+      position: fixed; inset: 0; z-index: 10000;
+      background: rgba(0,0,0,0.6);
+      display: none; align-items: center; justify-content: center;
+      padding: 24px;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal-card {
+      background: var(--s1); border: 1px solid var(--border2);
+      border-radius: 12px; padding: 22px;
+      max-width: 380px; width: 100%;
+      box-shadow: 0 18px 50px rgba(0,0,0,0.6);
+    }
+    .modal-title { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+    .modal-body { font-size: 13px; color: var(--muted); line-height: 1.55; margin-bottom: 18px; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+    .modal-btn {
+      background: var(--s2); border: 1px solid var(--border2); color: var(--text);
+      font-family: var(--font); font-size: 13px; font-weight: 600;
+      padding: 8px 16px; border-radius: 8px; cursor: pointer;
+      transition: all 0.13s;
+    }
+    .modal-btn:hover { border-color: var(--accent); }
+    .modal-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .modal-btn.primary:hover { filter: brightness(1.1); }
+    .modal-btn.danger { background: rgba(248,113,113,0.12); border-color: rgba(248,113,113,0.4); color: var(--error); }
+    .modal-btn.danger:hover { background: rgba(248,113,113,0.22); border-color: var(--error); }
   </style>
 </head>
 <body>
@@ -268,7 +338,7 @@
 
     <!-- PROVIDER -->
     <section id="section-provider" class="active">
-      <h2>LLM Provider</h2>
+      <div class="h2-row"><h2>LLM Provider</h2><span class="saved-msg" id="savedProvider">Saved</span></div>
       <p class="page-desc">Choose your AI provider and paste your API key. Keys are stored locally and never leave your browser.</p>
 
       <div class="card">
@@ -279,25 +349,25 @@
               <input type="radio" name="provider" value="anthropic" checked/>
               <div class="check"></div>
               <div class="provider-card-name">Anthropic</div>
-              <div class="provider-card-desc">Claude · best quality · prompt caching</div>
+              <div class="provider-card-desc">Best quality · from ~$0.002 / step</div>
             </label>
             <label class="provider-card" data-provider="openai">
               <input type="radio" name="provider" value="openai"/>
               <div class="check"></div>
               <div class="provider-card-name">OpenAI</div>
-              <div class="provider-card-desc">GPT-4o · widely supported</div>
+              <div class="provider-card-desc">Widely used · from ~$0.001 / step</div>
             </label>
             <label class="provider-card" data-provider="gemini">
               <input type="radio" name="provider" value="gemini"/>
               <div class="check"></div>
               <div class="provider-card-name">Google Gemini</div>
-              <div class="provider-card-desc">Flash · structured JSON output</div>
+              <div class="provider-card-desc">Lowest cost · from ~$0.0005 / step</div>
             </label>
             <label class="provider-card" data-provider="openrouter">
               <input type="radio" name="provider" value="openrouter"/>
               <div class="check"></div>
               <div class="provider-card-name">OpenRouter</div>
-              <div class="provider-card-desc">100+ models · pay-per-use</div>
+              <div class="provider-card-desc">Bring your own model · price varies</div>
             </label>
           </div>
         </div>
@@ -320,7 +390,7 @@
         <div class="card-row">
           <div class="card-row-label">
             <strong>Model</strong>
-            <span>Used for enrichment</span>
+            <span>Writes step titles and bodies.</span>
           </div>
           <div class="card-row-content">
             <select id="modelSelect"></select>
@@ -341,15 +411,11 @@
         </div>
       </div>
 
-      <div class="save-bar">
-        <button class="btn btn-primary" id="saveProvider">Save settings</button>
-        <span class="saved-msg" id="savedProvider">Saved</span>
-      </div>
     </section>
 
     <!-- TONE -->
     <section id="section-tone">
-      <h2>Tone of voice</h2>
+      <div class="h2-row"><h2>Tone of voice</h2><span class="saved-msg" id="savedTone">Saved</span></div>
       <p class="page-desc">Paste your brand voice guide here. It's injected into every AI enrichment call, so your team's writing style is applied automatically.</p>
 
       <div class="card">
@@ -368,23 +434,41 @@
         </div>
       </div>
 
-      <div class="save-bar">
-        <button class="btn btn-primary" id="saveTone">Save</button>
-        <span class="saved-msg" id="savedTone">Saved</span>
-      </div>
     </section>
 
     <!-- EXAMPLES -->
     <section id="section-examples">
-      <h2>Example steps</h2>
-      <p class="page-desc">Add up to 3 ideal step examples. These are used as few-shot prompts — the AI will match their structure and style exactly.</p>
+      <div class="h2-row"><h2>Example steps</h2><span class="saved-msg" id="savedExamples">Saved</span></div>
+      <p class="page-desc">Add up to 3 ideal step examples (inline) or point at an existing help-center article whose style the AI should match.</p>
 
       <div class="card" style="margin-bottom:12px">
         <div class="card-row" style="flex-direction:column;gap:12px">
           <ul class="examples-list" id="examplesList">
             <li style="color:var(--muted);font-size:13px;padding:6px 0">No examples added yet.</li>
           </ul>
-          <button class="btn btn-ghost btn-sm" id="addExampleBtn" style="align-self:flex-start">+ Add example</button>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-ghost btn-sm" id="addExampleBtn">+ Add inline example</button>
+            <button class="btn btn-ghost btn-sm" id="addUrlBtn">+ Add reference URL</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Reference-URL form -->
+      <div class="card" id="urlForm" style="display:none;margin-bottom:12px">
+        <div class="card-row" style="flex-direction:column;gap:12px">
+          <div class="section-title">Reference URL</div>
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;margin-bottom:5px">Public help-center article</label>
+            <input type="text" id="exUrl" placeholder="https://help.example.com/articles/how-to-…"/>
+            <div style="margin-top:4px;font-size:11px;color:var(--muted)">
+              The page text is fetched once and stored locally as a style reference.
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn btn-primary btn-sm" id="fetchUrlBtn">Fetch</button>
+            <button class="btn btn-ghost btn-sm" id="cancelUrlBtn">Cancel</button>
+            <span class="status" id="urlStatus" style="margin-top:0"></span>
+          </div>
         </div>
       </div>
 
@@ -394,15 +478,11 @@
           <div class="section-title">New example</div>
           <div>
             <label style="display:block;font-size:12px;font-weight:600;margin-bottom:5px">Title</label>
-            <input type="text" id="exTitle" placeholder="Enable two-factor authentication"/>
+            <input type="text" id="exTitle" placeholder="Title of an ideal step (e.g. Open the billing page)"/>
           </div>
           <div>
             <label style="display:block;font-size:12px;font-weight:600;margin-bottom:5px">Body (what to do + outcome)</label>
-            <textarea id="exBody" rows="3" placeholder="Click the Security tab in Account Settings to open your security preferences."></textarea>
-          </div>
-          <div>
-            <label style="display:block;font-size:12px;font-weight:600;margin-bottom:5px">Voiceover script <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
-            <textarea id="exVoice" rows="2" placeholder="Head over to the Security tab inside Account Settings."></textarea>
+            <textarea id="exBody" rows="3" placeholder="The full step as you'd want the AI to write it."></textarea>
           </div>
           <div style="display:flex;gap:8px">
             <button class="btn btn-primary btn-sm" id="saveExampleBtn">Add example</button>
@@ -411,82 +491,73 @@
         </div>
       </div>
 
-      <div class="save-bar">
-        <button class="btn btn-primary" id="saveExamples">Save examples</button>
-        <span class="saved-msg" id="savedExamples">Saved</span>
-      </div>
     </section>
 
     <!-- BRANDING -->
     <section id="section-branding">
-      <h2>Branding</h2>
+      <div class="h2-row"><h2>Branding</h2><span class="saved-msg" id="savedBranding">Saved</span></div>
       <p class="page-desc">Customize the colors of the annotations drawn over your screenshots so they match your product's brand. Changes apply to new annotations.</p>
 
-      <div class="card">
-        <div class="card-row">
-          <div class="card-row-label">
-            <strong>Circle</strong>
-            <span>Numbered callouts</span>
+      <div class="branding-grid">
+        <div class="card">
+          <div class="card-row">
+            <div class="card-row-label">
+              <strong>Circle</strong>
+              <span>Numbered callouts</span>
+            </div>
+            <div class="card-row-content">
+              <div class="color-row">
+                <input type="color" id="brandCircleColor" value="#7c6af7"/>
+                <input type="text" id="brandCircleHex" class="mono" value="#7c6af7" maxlength="7"/>
+              </div>
+            </div>
           </div>
-          <div class="card-row-content">
-            <div class="color-row">
-              <input type="color" id="brandCircleColor" value="#7c6af7"/>
-              <input type="text" id="brandCircleHex" class="mono" value="#7c6af7" maxlength="7"/>
+          <div class="card-row">
+            <div class="card-row-label">
+              <strong>Arrow</strong>
+              <span>Pointer arrows</span>
+            </div>
+            <div class="card-row-content">
+              <div class="color-row">
+                <input type="color" id="brandArrowColor" value="#f87171"/>
+                <input type="text" id="brandArrowHex" class="mono" value="#f87171" maxlength="7"/>
+              </div>
+            </div>
+          </div>
+          <div class="card-row">
+            <div class="card-row-label">
+              <strong>Highlight box</strong>
+              <span>Rectangular highlight overlay</span>
+            </div>
+            <div class="card-row-content">
+              <div class="color-row">
+                <input type="color" id="brandHighlightColor" value="#fbbf24"/>
+                <input type="text" id="brandHighlightHex" class="mono" value="#fbbf24" maxlength="7"/>
+              </div>
             </div>
           </div>
         </div>
-        <div class="card-row">
-          <div class="card-row-label">
-            <strong>Arrow</strong>
-            <span>Pointer arrows</span>
-          </div>
-          <div class="card-row-content">
-            <div class="color-row">
-              <input type="color" id="brandArrowColor" value="#f87171"/>
-              <input type="text" id="brandArrowHex" class="mono" value="#f87171" maxlength="7"/>
-            </div>
-          </div>
-        </div>
-        <div class="card-row">
-          <div class="card-row-label">
-            <strong>Highlight box</strong>
-            <span>Rectangular highlight overlay</span>
-          </div>
-          <div class="card-row-content">
-            <div class="color-row">
-              <input type="color" id="brandHighlightColor" value="#fbbf24"/>
-              <input type="text" id="brandHighlightHex" class="mono" value="#fbbf24" maxlength="7"/>
-            </div>
-          </div>
-        </div>
-        <div class="card-row">
-          <div class="card-row-label">
-            <strong>Preview</strong>
-            <span>Live preview using current colors</span>
-          </div>
-          <div class="card-row-content">
-            <canvas id="brandPreview" width="420" height="120"></canvas>
-          </div>
-        </div>
+        <aside class="branding-preview">
+          <div class="branding-preview-label">Live preview</div>
+          <canvas id="brandPreview" width="420" height="120"></canvas>
+        </aside>
       </div>
 
-      <div class="save-bar">
-        <button class="btn btn-primary" id="saveBranding">Save</button>
+      <div style="margin-top:12px">
         <button class="btn btn-ghost btn-sm" id="resetBranding">Reset to defaults</button>
-        <span class="saved-msg" id="savedBranding">Saved</span>
       </div>
     </section>
 
     <!-- ADVANCED -->
     <section id="section-advanced">
-      <h2>Advanced</h2>
+      <div class="h2-row"><h2>Advanced</h2><span class="saved-msg" id="savedAdvanced">Saved</span></div>
       <p class="page-desc">Fine-tune screenshot compression, storage, and video defaults.</p>
 
       <div class="card">
         <div class="card-row">
           <div class="card-row-label">
-            <strong>Screenshot quality</strong>
-            <span>JPEG quality sent to AI (lower = cheaper)</span>
+            <strong>Image detail</strong>
+            <span>Lower detail = cheaper to enrich.</span>
           </div>
           <div class="card-row-content">
             <div style="display:flex;align-items:center;gap:12px">
@@ -499,15 +570,18 @@
         <div class="card-row">
           <div class="card-row-label">
             <strong>Max image width</strong>
-            <span>Pixels, before sending to AI</span>
+            <span>Image resolution before enrichment.</span>
           </div>
           <div class="card-row-content">
             <select id="maxImageWidth">
-              <option value="640">640 px — minimum tokens</option>
-              <option value="1024" selected>1024 px — recommended</option>
-              <option value="1280">1280 px — higher fidelity</option>
-              <option value="1920">1920 px — full quality</option>
+              <option value="640">640 px</option>
+              <option value="1024" selected>1024 px</option>
+              <option value="1280">1280 px</option>
+              <option value="1920">1920 px</option>
             </select>
+            <div style="margin-top:6px;font-size:11px;color:var(--muted)">
+              1024 px is a good default. Drop lower to cut cost; raise for screens with very small text.
+            </div>
           </div>
         </div>
         <div class="card-row">
@@ -529,13 +603,20 @@
         </div>
       </div>
 
-      <div class="save-bar">
-        <button class="btn btn-primary" id="saveAdvanced">Save</button>
-        <span class="saved-msg" id="savedAdvanced">Saved</span>
-      </div>
     </section>
 
   </main>
+</div>
+
+<div class="modal-backdrop" id="modalBackdrop" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="modal-card">
+    <div class="modal-title" id="modalTitle"></div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-actions">
+      <button class="modal-btn" id="modalCancel" type="button">Cancel</button>
+      <button class="modal-btn primary" id="modalConfirm" type="button">OK</button>
+    </div>
+  </div>
 </div>
 
 <script type="module" src="main.js"></script>

@@ -29,19 +29,72 @@
     html, body { height: 100%; overflow: hidden; }
     body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 13px; display: flex; flex-direction: column; }
 
+    /* Visible focus on dark backgrounds — never rely on the browser default. */
+    :focus { outline: none; }
+    button:focus-visible, a:focus-visible, input:focus-visible,
+    select:focus-visible, textarea:focus-visible, [role="switch"]:focus-visible,
+    [tabindex]:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    /* Brand period motif — echoes the purple dot in the Guidr. logo. */
+    .sh::before {
+      content: ""; display: inline-block; width: 5px; height: 5px;
+      border-radius: 50%; background: var(--accent);
+      margin-right: 7px; vertical-align: 1px;
+    }
+
+    /* Inline SVG icon defaults — sized by parent context via font-size */
+    .ico {
+      width: 1em; height: 1em; vertical-align: -0.15em;
+      flex-shrink: 0; display: inline-block;
+    }
+    .ico-14 { width: 14px; height: 14px; }
+    .ico-16 { width: 16px; height: 16px; }
+    .ico-18 { width: 18px; height: 18px; }
+
     /* ── Top bar ── */
     .topbar {
       display: flex; align-items: center; justify-content: space-between;
       padding: 10px 12px; border-bottom: 1px solid var(--border);
       flex-shrink: 0; background: var(--s1);
     }
-    .logo { font-size: 15px; font-weight: 700; color: #fff; letter-spacing: -0.5px; }
+    .logo {
+      font-size: 15px; font-weight: 700; color: #fff; letter-spacing: -0.5px;
+      background: none; border: none; cursor: pointer; padding: 0;
+      font-family: var(--font); display: inline-flex; align-items: center; gap: 6px;
+      flex-shrink: 0;
+    }
     .logo em { color: var(--accent); font-style: normal; }
-    .topbar-right { display: flex; gap: 4px; }
+    .logo .back {
+      color: var(--muted); display: none; transition: color 0.12s;
+      align-items: center;
+    }
+    .logo .back .ico { width: 16px; height: 16px; }
+    .logo:hover .back { color: var(--text); }
+    .logo:hover .back { color: var(--accent); }
+    .logo.has-back .back { display: inline-flex; }
+    .logo.has-back .logo-text { display: none; }
+    .topbar-name {
+      flex: 1; min-width: 0; margin: 0 8px;
+      background: transparent; border: 1px solid transparent;
+      border-radius: 7px; padding: 5px 8px;
+      color: var(--text); font-family: var(--font);
+      font-size: 13px; font-weight: 600;
+      outline: none; transition: border-color 0.13s, background 0.13s;
+      display: none;
+    }
+    .topbar-name::placeholder { color: var(--muted); font-weight: 500; }
+    .topbar-name:hover { border-color: var(--border2); }
+    .topbar-name:focus { border-color: var(--accent); background: var(--s2); }
+    .topbar.editor .topbar-name { display: block; }
+    .topbar-right { display: flex; gap: 4px; flex-shrink: 0; }
     .iBtn { background: none; border: 1px solid var(--border); cursor: pointer; color: var(--muted);
       padding: 5px 10px; border-radius: 6px; font-size: 11px; font-weight: 600;
       letter-spacing: 0.04em; line-height: 1.2; transition: all 0.12s; }
     .iBtn:hover { color: var(--text); background: var(--s3); }
+    .iBtn-icon { padding: 5px 9px; font-size: 13px; font-weight: 700; letter-spacing: 0; }
 
     /* ── Views ── */
     .view { flex: 1; display: none; flex-direction: column; overflow: hidden; }
@@ -77,21 +130,18 @@
       animation: blink 1.1s ease-in-out infinite; }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
 
-    /* Countdown state — amber, big number, scale-in pulse per tick */
-    .rec-btn.counting {
-      background: linear-gradient(135deg, #fbbf24, #f59e0b);
-      color: #1a1208; padding: 22px 13px;
+    /* Brief "get ready" state — a single calm pulse before the green go burst */
+    .rec-btn.getready {
+      background: var(--s2);
+      color: var(--text);
+      border: 1.5px solid var(--accent);
+      animation: readyPulse 0.8s ease-in-out;
     }
-    .rec-btn.counting:hover { filter: none; transform: none; }
-    .rec-btn.counting #recLabel {
-      font-size: 34px; font-weight: 800; line-height: 1;
-      display: inline-block;
-    }
-    .rec-btn.counting #recLabel.tick { animation: countPulse 0.85s cubic-bezier(0.16, 1, 0.3, 1); }
-    @keyframes countPulse {
-      0%   { transform: scale(1.9); opacity: 0; }
-      25%  { transform: scale(0.92); opacity: 1; }
-      100% { transform: scale(1); opacity: 1; }
+    .rec-btn.getready:hover { filter: none; transform: none; }
+    @keyframes readyPulse {
+      0%   { box-shadow: 0 0 0 0 rgba(124,106,247,0.45); }
+      70%  { box-shadow: 0 0 0 10px rgba(124,106,247,0); }
+      100% { box-shadow: 0 0 0 0 rgba(124,106,247,0); }
     }
 
     /* Brief "go" burst when recording actually begins */
@@ -112,13 +162,40 @@
       padding: 9px 12px; display: flex; align-items: center; gap: 10px;
       animation: slideIn 0.2s ease-out;
     }
+    .capture-item.dropped { opacity: 0.45; }
     @keyframes slideIn { from { opacity:0; transform: translateY(6px); } }
     .capture-num { width: 22px; height: 22px; border-radius: 50%; background: var(--accentd);
       color: var(--accent); font-size: 11px; font-weight: 700;
       display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
     .capture-info { flex: 1; min-width: 0; }
-    .capture-info span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12px; }
-    .capture-info .ts { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+    .capture-info span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: 12px; }
+    .capture-info .ts { font-family: var(--mono); font-size: 10px; color: var(--muted); display: inline-block; }
+    .capture-drop {
+      background: none; border: 1px solid transparent; color: var(--muted);
+      cursor: pointer; font-size: 12px; line-height: 1;
+      padding: 4px 7px; border-radius: 6px; transition: all 0.13s;
+      flex-shrink: 0;
+    }
+    .capture-drop:hover { color: var(--error); border-color: var(--error); background: rgba(248,113,113,0.08); }
+    .capture-earlier { color: var(--muted); font-size: 11px; text-align: center; padding: 4px 0; }
+    .coach-line {
+      background: rgba(124,106,247,0.08); border: 1px solid rgba(124,106,247,0.25);
+      color: var(--text); font-size: 12px; line-height: 1.5;
+      padding: 9px 12px; border-radius: 8px; margin-bottom: 6px;
+    }
+    .rec-status {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 12px; border-radius: 999px;
+      background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.28);
+      color: var(--text); font-size: 12px; font-weight: 600;
+      margin-bottom: 8px; font-variant-numeric: tabular-nums;
+    }
+    .rec-status-dot {
+      width: 8px; height: 8px; border-radius: 50%; background: var(--rec);
+      animation: blink 1.1s ease-in-out infinite; flex-shrink: 0;
+    }
+    .rec-status-time { font-family: var(--mono); font-size: 12px; }
+    .rec-status-sep { color: var(--muted); }
 
     /* Sessions list */
     .sessions-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
@@ -127,29 +204,25 @@
       background: var(--s2); border: 1px solid var(--border); border-radius: 9px;
       padding: 11px 14px; cursor: pointer; transition: all 0.15s;
       display: flex; align-items: center; gap: 10px; margin-bottom: 7px;
+      position: relative;
     }
     .session-card:hover { border-color: var(--accent); background: var(--s3); }
     .session-card-body { flex: 1; min-width: 0; }
     .session-card-body strong { display: block; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .session-card-body span { color: var(--muted); font-size: 11px; }
+    .session-card-body .meta { color: var(--muted); font-size: 11px; display: flex; align-items: center; gap: 6px; margin-top: 2px; }
     .size-badge {
       font-family: var(--mono); font-size: 10px; color: var(--muted);
       background: var(--s3); border: 1px solid var(--border2);
-      border-radius: 99px; padding: 2px 7px;
+      border-radius: 99px; padding: 1px 7px;
       display: inline-flex; align-items: center; gap: 4px;
     }
     .size-badge.has-vid::before { content: "●"; color: var(--accent); font-size: 9px; }
-    .session-card-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.15s; }
-    .session-card:hover .session-card-actions { opacity: 1; }
-    .icon-act {
-      background: none; border: 1px solid transparent; color: var(--muted);
-      cursor: pointer; font-size: 12px; line-height: 1;
-      padding: 4px 8px; border-radius: 6px;
-      transition: color 0.15s, background 0.15s, border-color 0.15s;
+    .session-card .overflow-btn {
+      opacity: 0; transition: opacity 0.15s;
     }
-    .icon-act:hover { color: var(--text); border-color: var(--border2); background: var(--s3); }
-    .icon-act.danger:hover { color: var(--error); border-color: var(--error); background: rgba(248,113,113,0.08); }
-    .empty-sessions { text-align: center; padding: 30px 16px; color: var(--muted); font-size: 13px; }
+    .session-card:hover .overflow-btn { opacity: 1; }
+    .empty-sessions { text-align: center; padding: 30px 16px; color: var(--muted); font-size: 13px; line-height: 1.55; }
+    .empty-sessions strong { color: var(--text); font-weight: 600; }
 
     /* First-run onboarding card */
     .setup-card {
@@ -164,14 +237,25 @@
     }
     .setup-card strong { font-size: 14px; line-height: 1.35; color: var(--text); }
     .setup-card p { font-size: 12px; color: var(--muted); line-height: 1.5; }
+    .setup-card .setup-actions {
+      align-self: stretch; display: flex; flex-direction: column;
+      gap: 6px; margin-top: 4px;
+    }
     .setup-card .setup-btn {
-      align-self: stretch; margin-top: 4px;
       background: var(--accent); color: #fff; border: none;
       border-radius: 9px; padding: 11px 14px;
       font-family: var(--font); font-size: 13px; font-weight: 700;
       cursor: pointer; transition: filter 0.15s, transform 0.1s;
     }
     .setup-card .setup-btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+    .setup-card .setup-skip {
+      background: none; border: none; color: var(--muted);
+      font-family: var(--font); font-size: 12px; font-weight: 500;
+      padding: 4px 0; cursor: pointer; transition: color 0.13s;
+      text-align: center; text-decoration: underline; text-underline-offset: 2px;
+      text-decoration-color: var(--border2);
+    }
+    .setup-card .setup-skip:hover { color: var(--text); text-decoration-color: var(--text); }
 
     /* ══════════════════════════════════════════
        EDITOR VIEW
@@ -184,12 +268,8 @@
       position: relative; background: #000; flex-shrink: 0;
       border-bottom: 1px solid var(--border);
     }
+    .video-pane.empty { display: none; }
     #srcVideo { width: 100%; display: block; max-height: 240px; background: #000; }
-    .video-empty {
-      display: flex; align-items: center; justify-content: center;
-      padding: 28px 16px; color: var(--muted); font-size: 12px; text-align: center;
-      background: var(--s1);
-    }
 
     /* Chapter rail */
     .chapter-rail {
@@ -210,7 +290,14 @@
     .chip:hover { color: var(--text); border-color: var(--accent); }
     .chip.active { border-color: var(--accent); }
     .chip.active .chip-meta { background: var(--accentd); color: var(--text); }
-    .chip.excluded { opacity: 0.45; }
+    .chip.excluded { opacity: 0.5; position: relative; }
+    .chip.excluded::after {
+      content: "excluded"; position: absolute; top: 4px; left: 4px;
+      background: rgba(0,0,0,0.75); color: #fff;
+      font-family: var(--mono); font-size: 8px; font-weight: 600;
+      padding: 1px 5px; border-radius: 3px;
+      letter-spacing: 0.04em; text-transform: uppercase;
+    }
     .chip-thumb {
       width: 100%; height: 46px; object-fit: cover; background: var(--s3);
       display: block;
@@ -228,6 +315,41 @@
     .chip.active .chip-num { background: var(--accent); color: #fff; }
     .chip-time { font-family: var(--mono); font-size: 9px; }
 
+    /* Annotation pane */
+    .annot-pane {
+      background: #000; padding: 8px;
+      border-bottom: 1px solid var(--border);
+      display: none;
+    }
+    .annot-pane.active { display: block; }
+    .annot-toolbar {
+      display: flex; align-items: center; gap: 4px;
+      padding: 0 0 8px;
+    }
+    .annot-tool {
+      background: var(--s2); border: 1px solid var(--border2); color: var(--text);
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 6px; border-radius: 6px; cursor: pointer;
+      transition: all 0.13s;
+    }
+    .annot-tool .ico { width: 14px; height: 14px; }
+    .annot-tool:hover { border-color: var(--accent); }
+    .annot-tool.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .annot-tool.right { margin-left: auto; }
+    .annot-hint {
+      font-family: var(--mono); font-size: 10px; color: var(--muted);
+      padding: 0 0 6px; min-height: 14px; line-height: 1.4;
+      transition: color 0.13s;
+    }
+    .annot-canvas-wrap {
+      position: relative; width: 100%;
+      background: var(--s1); border-radius: 6px; overflow: hidden;
+    }
+    .annot-canvas {
+      display: block; width: 100%; height: auto;
+      max-height: 280px; object-fit: contain;
+    }
+
     /* Step detail editor */
     .step-detail {
       flex: 1; overflow-y: auto; padding: 12px;
@@ -237,37 +359,71 @@
     .step-detail::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 99px; }
 
     .step-controls {
-      display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
-      padding: 9px 11px; background: var(--s2); border: 1px solid var(--border2);
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 10px; background: var(--s2); border: 1px solid var(--border2);
       border-radius: 9px;
     }
-    .step-controls label {
-      display: flex; align-items: center; gap: 6px;
-      font-size: 11px; color: var(--muted); font-weight: 600;
-      letter-spacing: 0.04em; text-transform: uppercase;
-    }
-    .step-controls input[type="checkbox"] {
-      accent-color: var(--accent); width: 14px; height: 14px;
-    }
-    .step-controls select {
+    .skip-toggle {
+      display: inline-flex; align-items: center; gap: 8px;
       background: var(--s3); border: 1px solid var(--border2); color: var(--text);
-      font-family: var(--font); font-size: 12px; text-transform: none;
-      padding: 4px 8px; border-radius: 6px; outline: none; cursor: pointer;
-      letter-spacing: 0;
+      font-family: var(--font); font-size: 12px; font-weight: 600;
+      padding: 4px 10px 4px 4px; border-radius: 999px; cursor: pointer;
+      transition: all 0.13s;
     }
+    .skip-toggle:hover { border-color: var(--accent); }
+    .skip-toggle .switch-track {
+      width: 26px; height: 16px; border-radius: 999px;
+      background: var(--accent); position: relative;
+      transition: background 0.15s;
+      flex-shrink: 0;
+    }
+    .skip-toggle .switch-thumb {
+      position: absolute; top: 2px; left: 12px;
+      width: 12px; height: 12px; border-radius: 50%;
+      background: #fff;
+      transition: left 0.15s;
+    }
+    .skip-toggle.skipped { color: var(--muted); }
+    .skip-toggle.skipped .switch-track { background: var(--border2); }
+    .skip-toggle.skipped .switch-thumb { left: 2px; background: var(--muted); }
     .step-controls .ts-readout {
       font-family: var(--mono); font-size: 11px; color: var(--muted);
-      margin-left: auto; text-transform: none; letter-spacing: 0;
+      margin-left: auto;
     }
-    .step-controls button.delete-step {
+    .overflow-wrap { position: relative; }
+    .overflow-btn {
       background: none; border: 1px solid var(--border2); color: var(--muted);
-      font-family: var(--font); font-size: 11px; padding: 4px 9px;
-      border-radius: 6px; cursor: pointer; transition: all 0.13s;
-      text-transform: none; letter-spacing: 0;
+      cursor: pointer; font-size: 16px; line-height: 1;
+      padding: 4px 9px; border-radius: 6px; transition: all 0.13s;
     }
-    .step-controls button.delete-step:hover {
-      color: var(--error); border-color: var(--error); background: rgba(248,113,113,0.08);
+    .overflow-btn:hover { color: var(--text); border-color: var(--accent); }
+    .overflow-menu {
+      position: absolute; right: 0; top: calc(100% + 4px); z-index: 50;
+      background: var(--s2); border: 1px solid var(--border2);
+      border-radius: 8px; padding: 4px; min-width: 200px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      display: none;
     }
+    .overflow-menu.open { display: block; }
+    .overflow-menu .menu-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 10px; border-radius: 6px; cursor: pointer;
+      font-size: 12px; color: var(--text); transition: background 0.1s;
+    }
+    .overflow-menu .menu-item .ico { width: 14px; height: 14px; color: var(--muted); }
+    .overflow-menu .menu-item:hover .ico { color: var(--text); }
+    .overflow-menu .menu-item.danger .ico { color: var(--error); }
+    .overflow-btn .ico { width: 16px; height: 16px; }
+    .overflow-menu .menu-item:hover { background: var(--s3); }
+    .overflow-menu .menu-item.danger { color: var(--error); }
+    .overflow-menu .menu-item.danger:hover { background: rgba(248,113,113,0.1); }
+    .overflow-menu .menu-label { font-size: 11px; color: var(--muted); padding: 6px 10px 2px; }
+    .overflow-menu select {
+      width: 100%; background: var(--s3); border: 1px solid var(--border2);
+      color: var(--text); font-family: var(--font); font-size: 12px;
+      padding: 5px 8px; border-radius: 6px; outline: none; cursor: pointer; margin-bottom: 4px;
+    }
+    .overflow-menu .sep { height: 1px; background: var(--border); margin: 4px 0; }
 
     .gen-row { display: flex; align-items: center; gap: 6px; }
     .gen-btn {
@@ -298,7 +454,6 @@
       overflow: hidden; min-height: 36px;
     }
     .auto-ta:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,106,247,0.1); }
-    .auto-ta.voice { font-family: var(--mono); font-size: 12px; background: var(--s1); }
 
     /* Navigation footer */
     .editor-footer {
@@ -316,25 +471,66 @@
     .nav-btn:hover { border-color: var(--accent); color: var(--text); }
     .nav-btn:disabled { opacity: 0.3; cursor: default; }
     .step-counter { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+    .kbd-table { width: 100%; border-collapse: collapse; }
+    .kbd-table td { padding: 6px 0; font-size: 12px; color: var(--text); vertical-align: middle; }
+    .kbd-table td:last-child { text-align: right; white-space: nowrap; }
+    .kbd {
+      display: inline-block; min-width: 22px; padding: 2px 6px;
+      background: var(--s3); border: 1px solid var(--border2);
+      border-radius: 5px; font-family: var(--mono); font-size: 11px;
+      color: var(--text); text-align: center; line-height: 1.3;
+    }
+    .kbd + .kbd { margin-left: 3px; }
 
     /* Export bar */
     .export-bar {
       display: flex; gap: 7px; align-items: center;
       padding: 10px 12px; border-top: 1px solid var(--border); flex-shrink: 0; background: var(--s1);
-    }
-    .export-bar select {
-      flex: 1; background: var(--s2); border: 1px solid var(--border2);
-      color: var(--text); font-family: var(--font); font-size: 12px;
-      padding: 7px 10px; border-radius: 7px; outline: none; cursor: pointer;
+      position: relative;
     }
     .btn {
-      display: inline-flex; align-items: center; gap: 6px;
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
       background: var(--accent); color: #fff; border: none;
       border-radius: 8px; padding: 7px 14px; font-family: var(--font);
       font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.15s; white-space: nowrap;
     }
     .btn:hover { filter: brightness(1.1); }
     .btn:disabled { opacity: 0.4; cursor: default; filter: none; }
+    .btn-export { flex: 1; padding: 9px 14px; font-size: 13px; }
+    .export-menu {
+      position: absolute; left: 12px; right: 12px; bottom: calc(100% + 6px); z-index: 50;
+      background: var(--s2); border: 1px solid var(--border2);
+      border-radius: 10px; padding: 4px;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.55);
+      display: none;
+      max-height: 60vh; overflow-y: auto;
+    }
+    .export-menu.open { display: block; }
+    .export-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 10px; border-radius: 7px;
+    }
+    .export-row + .export-row { border-top: 1px solid var(--border); }
+    .export-row-body { flex: 1; min-width: 0; }
+    .export-row-body strong {
+      display: block; font-size: 12px; font-weight: 700; color: var(--text);
+      line-height: 1.3;
+    }
+    .export-row-body span {
+      display: block; font-size: 11px; color: var(--muted);
+      line-height: 1.35; margin-top: 1px;
+    }
+    .export-row-actions { display: flex; gap: 4px; flex-shrink: 0; }
+    .btn-row {
+      background: var(--s3); border: 1px solid var(--border2); color: var(--text);
+      font-family: var(--font); font-size: 11px; font-weight: 600;
+      padding: 5px 10px; border-radius: 6px; cursor: pointer;
+      transition: all 0.13s; line-height: 1;
+    }
+    .btn-row:hover { border-color: var(--accent); background: var(--s2); }
+    .btn-row:disabled { opacity: 0.4; cursor: default; }
+    .btn-row-icon { padding: 5px 7px; display: inline-flex; align-items: center; }
+    .btn-row-icon .ico { width: 13px; height: 13px; }
 
     /* Toast */
     .toast {
@@ -356,6 +552,35 @@
 
     .sh { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
 
+    /* In-panel confirm modal */
+    .modal-backdrop {
+      position: fixed; inset: 0; z-index: 10000;
+      background: rgba(0,0,0,0.55);
+      display: none; align-items: center; justify-content: center;
+      padding: 18px;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal-card {
+      background: var(--s2); border: 1px solid var(--border2);
+      border-radius: 12px; padding: 18px 18px 14px;
+      max-width: 320px; width: 100%;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.55);
+    }
+    .modal-title { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+    .modal-body { font-size: 12px; color: var(--muted); line-height: 1.5; margin-bottom: 14px; }
+    .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+    .modal-btn {
+      background: var(--s3); border: 1px solid var(--border2); color: var(--text);
+      font-family: var(--font); font-size: 12px; font-weight: 600;
+      padding: 7px 14px; border-radius: 7px; cursor: pointer;
+      transition: all 0.13s;
+    }
+    .modal-btn:hover { border-color: var(--accent); }
+    .modal-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .modal-btn.primary:hover { filter: brightness(1.1); }
+    .modal-btn.danger { background: rgba(248,113,113,0.12); border-color: rgba(248,113,113,0.4); color: var(--error); }
+    .modal-btn.danger:hover { background: rgba(248,113,113,0.22); border-color: var(--error); }
+
     /* Hidden frame-extraction helpers */
     .hidden-extractor { position: absolute; left: -9999px; top: -9999px; }
   </style>
@@ -364,9 +589,12 @@
 
 <!-- ── Top bar ── -->
 <div class="topbar">
-  <div class="logo">Guidr<em>.</em></div>
+  <button class="logo" id="btn-home" type="button" aria-label="Back to home">
+    <span class="back" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></span><span class="logo-text">Guidr<em>.</em></span>
+  </button>
+  <input class="topbar-name" id="sessionName" type="text" placeholder="Untitled guide" aria-label="Guide name" autocomplete="off"/>
   <div class="topbar-right">
-    <button class="iBtn" id="btn-home">Home</button>
+    <button class="iBtn iBtn-icon" id="helpBtn" type="button" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
     <button class="iBtn" id="btn-options">Settings</button>
   </div>
 </div>
@@ -377,13 +605,12 @@
 <div class="view active" id="v-home">
   <div class="setup-card" id="setupCard" style="display:none">
     <span class="setup-eyebrow">Get started</span>
-    <strong>Add an API key to start recording</strong>
-    <p>Guidr enriches your guides with AI using your own provider key — Anthropic, OpenAI, Gemini, or OpenRouter. Setup takes about a minute.</p>
-    <button class="setup-btn" id="goSetupBtn">Open Settings</button>
-  </div>
-
-  <div class="name-row" id="nameRow">
-    <input type="text" id="sessionName" value="Untitled guide" placeholder="Guide name…"/>
+    <strong>Add an API key to auto-write your guides</strong>
+    <p>Guidr writes step titles and bodies for you using your own provider key — Anthropic, OpenAI, Gemini, or OpenRouter. Setup takes about a minute. You can also skip this and write steps by hand.</p>
+    <div class="setup-actions">
+      <button class="setup-btn" id="goSetupBtn">Open Settings</button>
+      <button class="setup-skip" id="skipSetupBtn" type="button">Skip — I'll write steps manually</button>
+    </div>
   </div>
 
   <button class="rec-btn" id="recBtn">
@@ -392,7 +619,13 @@
   </button>
 
   <div id="captureSection" style="display:none">
-    <div class="sh">Captured steps</div>
+    <div class="rec-status">
+      <span class="rec-status-dot"></span>
+      <span class="rec-status-time" id="recTime">0:00</span>
+      <span class="rec-status-sep">·</span>
+      <span><span id="recStepCount">0</span> step<span id="recStepPlural">s</span> captured</span>
+    </div>
+    <div class="coach-line" id="coachLine" style="display:none">Walk through your product. Each click captures a step. Stop when you're done.</div>
     <div class="capture-list" id="captureList"></div>
   </div>
 
@@ -400,7 +633,7 @@
     <div class="sessions-header">
       <span>Recent guides</span>
     </div>
-    <div id="sessionsList"><div class="empty-sessions">Record your first guide to get started.</div></div>
+    <div id="sessionsList"><div class="empty-sessions">No guides yet. Hit <strong>Start recording</strong>, walk through your product, then stop. Your guide appears here.</div></div>
   </div>
 </div>
 
@@ -410,68 +643,154 @@
 <div class="view" id="v-editor">
 
   <!-- Video player -->
-  <div class="video-pane">
+  <div class="video-pane" id="videoPane">
     <video id="srcVideo" controls preload="auto" controlsList="nofullscreen nodownload" style="display:none"></video>
-    <div class="video-empty" id="videoEmpty">No video recording for this guide.</div>
   </div>
 
   <!-- Chapter rail -->
   <div class="chapter-rail" id="chapterRail"></div>
 
+  <!-- Annotation pane (hidden until user opens it) -->
+  <div class="annot-pane" id="annotPane">
+    <div class="annot-toolbar">
+      <button class="annot-tool" data-tool="circle" data-hint="Numbered callout · 1" title="Numbered callout (1)" aria-label="Numbered callout"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/></svg></button>
+      <button class="annot-tool" data-tool="arrow" data-hint="Arrow · 2 · drag from→to" title="Arrow (2) — drag from→to" aria-label="Arrow"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="18" x2="18" y2="6"/><polyline points="9 6 18 6 18 15"/></svg></button>
+      <button class="annot-tool" data-tool="highlight" data-hint="Highlight box · 3 · drag" title="Highlight box (3) — drag" aria-label="Highlight box"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="16" x="4" y="4" rx="1"/></svg></button>
+      <button class="annot-tool" data-tool="mask" data-hint="Mask sensitive area · 4 · drag" title="Mask sensitive area (4) — drag" aria-label="Mask"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3 2"><rect width="16" height="16" x="4" y="4" rx="1"/></svg></button>
+      <button class="annot-tool" id="annotUndo" data-hint="Undo last annotation" title="Undo last" aria-label="Undo"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></svg></button>
+      <button class="annot-tool" id="annotClear" data-hint="Clear all annotations" title="Clear all" aria-label="Clear all"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+      <button class="annot-tool right" id="annotClose" data-hint="Close annotations" title="Close annotations" aria-label="Close"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div class="annot-hint" id="annotHint">&nbsp;</div>
+    <div class="annot-canvas-wrap">
+      <canvas class="annot-canvas" id="annotCanvas" width="800" height="450"></canvas>
+    </div>
+  </div>
+
   <!-- Selected step detail -->
   <div class="step-detail" id="stepDetail">
 
     <div class="step-controls">
-      <label><input type="checkbox" id="stepInclude" checked/> Include</label>
-      <label>Media:
-        <select id="stepMedia">
-          <option value="screenshot">Screenshot</option>
-          <option value="none">None</option>
-        </select>
-      </label>
+      <button class="skip-toggle" id="stepSkipToggle" type="button" role="switch" aria-checked="true" aria-label="Include this step in the guide">
+        <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+        <span>Include in guide</span>
+      </button>
       <span class="ts-readout" id="stepTs">0:00.0</span>
-      <button class="delete-step" id="deleteStepBtn" title="Delete this step">Delete</button>
+      <div class="overflow-wrap">
+        <button class="overflow-btn" id="stepMoreBtn" type="button" aria-label="More actions"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></button>
+        <div class="overflow-menu" id="stepMoreMenu">
+          <div class="menu-item" id="enrichAllBtn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Enrich all steps with AI</div>
+          <div class="sep"></div>
+          <div class="menu-label">Media</div>
+          <select id="stepMedia">
+            <option value="screenshot">Screenshot</option>
+            <option value="none">None</option>
+          </select>
+          <div class="sep"></div>
+          <div class="menu-item danger" id="deleteStepBtn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Delete step</div>
+        </div>
+      </div>
     </div>
 
     <div class="gen-row">
-      <button class="gen-btn" id="enrichOneBtn">Enrich with AI</button>
-      <button class="gen-btn secondary" id="enrichAllBtn">Enrich all steps</button>
+      <button class="gen-btn" id="enrichOneBtn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3m0 12v3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1M3 12h3m12 0h3M5.6 18.4l2.1-2.1m8.6-8.6 2.1-2.1"/></svg> Enrich with AI</button>
+      <button class="gen-btn" id="openAnnotBtn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg> Annotate screenshot</button>
     </div>
 
     <div class="field-group">
       <div class="field-label">Title<span class="char-count" id="titleCount">0 / 60</span></div>
-      <textarea class="auto-ta" id="stepTitle" placeholder="Click the Invite Members button…" rows="1" maxlength="80"></textarea>
+      <textarea class="auto-ta" id="stepTitle" placeholder="What is the user doing in this step?" rows="1" maxlength="60"></textarea>
     </div>
 
     <div class="field-group">
       <div class="field-label">Description<span class="char-count" id="bodyCount">0 / 200</span></div>
-      <textarea class="auto-ta" id="stepBody" placeholder="Describe what to do and the outcome…" rows="3" maxlength="300"></textarea>
-    </div>
-
-    <div class="field-group">
-      <div class="field-label">Voiceover script<span class="char-count" id="voiceCount">0 / 280</span></div>
-      <textarea class="auto-ta voice" id="stepVoice" placeholder="Spoken version for narration…" rows="3" maxlength="400"></textarea>
+      <textarea class="auto-ta" id="stepBody" placeholder="One or two sentences. What to click and what happens next." rows="3" maxlength="200"></textarea>
     </div>
 
   </div>
 
   <!-- Navigation footer -->
   <div class="editor-footer">
-    <button class="nav-btn" id="prevBtn">Prev</button>
+    <button class="nav-btn" id="prevBtn" title="Previous step (←)">Prev</button>
     <span class="step-counter" id="stepCounter">1 / 1</span>
-    <button class="nav-btn" id="nextBtn">Next</button>
+    <button class="nav-btn" id="nextBtn" title="Next step (→)">Next</button>
+  </div>
+
+  <!-- Keyboard shortcuts sheet -->
+  <div class="modal-backdrop" id="helpBackdrop" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+    <div class="modal-card" style="max-width:340px">
+      <div class="modal-title" id="helpTitle">Keyboard shortcuts</div>
+      <div class="modal-body" style="margin-bottom:14px">
+        <table class="kbd-table">
+          <tr><td>Previous / Next step</td><td><span class="kbd">←</span> <span class="kbd">→</span></td></tr>
+          <tr><td>Enrich current step with AI</td><td><span class="kbd">⌘</span><span class="kbd">↵</span></td></tr>
+          <tr><td>Close menus / modals</td><td><span class="kbd">Esc</span></td></tr>
+          <tr><td>Annotation: callout / arrow / box / mask</td><td><span class="kbd">1</span>&nbsp;<span class="kbd">2</span>&nbsp;<span class="kbd">3</span>&nbsp;<span class="kbd">4</span></td></tr>
+          <tr><td>Show this sheet</td><td><span class="kbd">?</span></td></tr>
+        </table>
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn primary" id="helpClose" type="button">Close</button>
+      </div>
+    </div>
   </div>
 
   <!-- Export bar -->
   <div class="export-bar" id="exportBar">
-    <select id="exportFmt">
-      <option value="markdown">Markdown</option>
-      <option value="html">HTML</option>
-      <option value="intercom">Copy for Intercom</option>
-      <option value="video">Video (.webm)</option>
-      <option value="json">Raw JSON</option>
-    </select>
-    <button class="btn" id="exportBtn">Export</button>
+    <button class="btn btn-export" id="exportBtn" type="button" aria-haspopup="menu" aria-expanded="false">
+      Export this guide
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;margin-left:4px"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+    <div class="export-menu" id="exportMenu" role="menu">
+      <div class="export-row" data-fmt="intercom">
+        <div class="export-row-body">
+          <strong>Intercom HTML</strong>
+          <span>Paste straight into the article editor.</span>
+        </div>
+        <div class="export-row-actions">
+          <button class="btn-row" data-action="copy" title="Copy to clipboard">Copy</button>
+          <button class="btn-row btn-row-icon" data-action="download" title="Download as .html" aria-label="Download Intercom HTML"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+        </div>
+      </div>
+      <div class="export-row" data-fmt="markdown">
+        <div class="export-row-body">
+          <strong>Markdown</strong>
+          <span>For Notion, GitHub, Linear, docs.</span>
+        </div>
+        <div class="export-row-actions">
+          <button class="btn-row" data-action="copy" title="Copy to clipboard">Copy</button>
+          <button class="btn-row btn-row-icon" data-action="download" title="Download as .md" aria-label="Download Markdown"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+        </div>
+      </div>
+      <div class="export-row" data-fmt="html">
+        <div class="export-row-body">
+          <strong>HTML page</strong>
+          <span>Self-contained, share as a file.</span>
+        </div>
+        <div class="export-row-actions">
+          <button class="btn-row" data-action="copy" title="Copy to clipboard">Copy</button>
+          <button class="btn-row btn-row-icon" data-action="download" title="Download as .html" aria-label="Download HTML"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+        </div>
+      </div>
+      <div class="export-row" data-fmt="video">
+        <div class="export-row-body">
+          <strong>Video</strong>
+          <span>Original screen recording (.webm).</span>
+        </div>
+        <div class="export-row-actions">
+          <button class="btn-row" data-action="download">Download</button>
+        </div>
+      </div>
+      <div class="export-row" data-fmt="json">
+        <div class="export-row-body">
+          <strong>Raw JSON</strong>
+          <span>Backup / import to another tool.</span>
+        </div>
+        <div class="export-row-actions">
+          <button class="btn-row" data-action="download">Download</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -480,6 +799,17 @@
 <canvas id="extractorCanvas" class="hidden-extractor"></canvas>
 
 <div class="toast" id="toast"></div>
+
+<div class="modal-backdrop" id="modalBackdrop" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="modal-card">
+    <div class="modal-title" id="modalTitle"></div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-actions">
+      <button class="modal-btn" id="modalCancel" type="button">Cancel</button>
+      <button class="modal-btn danger" id="modalConfirm" type="button">Delete</button>
+    </div>
+  </div>
+</div>
 
 <script type="module" src="main.js"></script>
 </body>

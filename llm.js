@@ -120,21 +120,27 @@ function buildSystemPrompt(toneGuide = "", examples = []) {
 • Body: one sentence of what to do + one sentence of why/outcome. ≤35 words total.
 • No jargon. Name the specific button/field, never say "click the button".`;
 
-  const fewShot = examples.length
+  const inline = examples.filter((e) => e?.kind !== "url" && e?.title && e?.body).slice(0, 3);
+  const urlRefs = examples.filter((e) => e?.kind === "url" && e?.textSnippet).slice(0, 3);
+
+  const fewShot = inline.length
     ? `\n## Style examples (match this closely)\n\n` +
-      examples
-        .slice(0, 3)
-        .map(
-          (e, i) =>
-            `Example ${i + 1}:\n{"title":"${e.title}","body":"${e.body}","voiceoverScript":"${e.voiceoverScript || e.body}"}`
-        )
+      inline
+        .map((e, i) => `Example ${i + 1}:\n{"title":"${e.title}","body":"${e.body}"}`)
         .join("\n\n")
+    : "";
+
+  const styleRefs = urlRefs.length
+    ? `\n## Style references — match the voice and structure, do NOT copy content\n\n` +
+      urlRefs
+        .map((e) => `From ${e.url}:\n${e.textSnippet.slice(0, 2000)}`)
+        .join("\n\n---\n\n")
     : "";
 
   return `You write step-by-step product documentation from screenshot evidence and UI metadata.
 
 ## Tone & style
-${tone}${fewShot}
+${tone}${fewShot}${styleRefs}
 
 ## Inputs
 - Screenshot: the PRIMARY source. Describe what is visible — the screen the user is on, the dialog/panel/state shown, the action implied by that state.
@@ -143,15 +149,14 @@ ${tone}${fewShot}
 
 ## Output
 Return ONLY a valid JSON object — no markdown fences, no preamble, nothing else:
-{"title":"…","body":"…","voiceoverScript":"…"}
+{"title":"…","body":"…"}
 
-title          : ≤8 words, action verb first
-body           : ≤35 words, what + why/outcome
-voiceoverScript: spoken version, ≤45 words, more conversational
+title : ≤8 words, action verb first
+body  : ≤35 words, what + why/outcome
 
 ## Fallback
 Only use this if the screenshot is genuinely blank or missing — never because metadata is weak:
-{"title":"Uncaptured step","body":"Screenshot was unavailable for this step.","voiceoverScript":"This step could not be documented automatically."}`.trim();
+{"title":"Uncaptured step","body":"Screenshot was unavailable for this step."}`.trim();
 }
 
 function buildUserText(step, prunedTarget) {

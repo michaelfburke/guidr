@@ -51,9 +51,9 @@ const BRAND_DEFAULTS = {
   brandHighlightColor: "#fbbf24",
 };
 let state = {
-  provider: "anthropic",
+  provider: "gemini",
   apiKey: "",
-  model: "claude-haiku-4-5-20251001",
+  model: "gemini-2.5-flash",
   openrouterModel: "google/gemini-2.0-flash-001",
   toneGuide: "",
   exampleGuides: [],
@@ -119,7 +119,9 @@ function setProvider(p, updateInput = true) {
       opt.value = m.value; opt.textContent = m.label;
       sel.appendChild(opt);
     });
-    sel.value = state.model || models[0].value;
+    const valid = models.some((m) => m.value === state.model);
+    sel.value = valid ? state.model : models[0].value;
+    state.model = sel.value;
     sel.style.display = "";
     document.getElementById("openrouterModelRow").style.display = "none";
   } else {
@@ -190,6 +192,7 @@ document.getElementById("testKey").addEventListener("click", async () => {
     }
     st.className = ok ? "status ok" : "status err";
     st.textContent = ok ? "Key valid" : String(errMsg);
+    if (ok) autoSave({ apiKey: key }, "savedProvider");
   } catch(e) {
     st.className = "status err"; st.textContent = e.message;
   }
@@ -208,29 +211,112 @@ function updatePreview() {
 }
 
 // ── Examples ──────────────────────────────────────────────────────────────
-document.getElementById("addExampleBtn").addEventListener("click", () => {
-  if (exampleGuides.length >= 3) { alert("Max 3 examples."); return; }
+const URL_SNIPPET_MAX = 4000;
+
+document.getElementById("addExampleBtn").addEventListener("click", async () => {
+  if (exampleGuides.length >= 3) {
+    await notifyModal({ title: "Maximum reached", body: "You can have up to 3 examples. Remove one before adding another." });
+    return;
+  }
   document.getElementById("exampleForm").style.display = "";
-  document.getElementById("addExampleBtn").style.display = "none";
+  document.getElementById("urlForm").style.display = "none";
 });
 document.getElementById("cancelExampleBtn").addEventListener("click", () => {
   document.getElementById("exampleForm").style.display = "none";
-  document.getElementById("addExampleBtn").style.display = "";
   clearExampleForm();
 });
-document.getElementById("saveExampleBtn").addEventListener("click", () => {
+document.getElementById("saveExampleBtn").addEventListener("click", async () => {
   const title = document.getElementById("exTitle").value.trim();
   const body  = document.getElementById("exBody").value.trim();
-  const voice = document.getElementById("exVoice").value.trim();
-  if (!title || !body) { alert("Title and body are required."); return; }
-  exampleGuides.push({ title, body, voiceoverScript: voice || body });
+  if (!title || !body) {
+    await notifyModal({ title: "Missing fields", body: "Both title and body are required to add an example." });
+    return;
+  }
+  exampleGuides.push({ title, body });
   renderExamples();
+  autoSave({ exampleGuides }, "savedExamples");
   document.getElementById("exampleForm").style.display = "none";
-  document.getElementById("addExampleBtn").style.display = "";
   clearExampleForm();
 });
 function clearExampleForm() {
-  ["exTitle","exBody","exVoice"].forEach(id => document.getElementById(id).value = "");
+  ["exTitle","exBody"].forEach(id => document.getElementById(id).value = "");
+}
+
+// Reference-URL form
+document.getElementById("addUrlBtn").addEventListener("click", async () => {
+  if (exampleGuides.length >= 3) {
+    await notifyModal({ title: "Maximum reached", body: "You can have up to 3 examples. Remove one before adding another." });
+    return;
+  }
+  document.getElementById("urlForm").style.display = "";
+  document.getElementById("exampleForm").style.display = "none";
+  document.getElementById("urlStatus").textContent = "";
+});
+document.getElementById("cancelUrlBtn").addEventListener("click", () => {
+  document.getElementById("urlForm").style.display = "none";
+  document.getElementById("exUrl").value = "";
+  document.getElementById("urlStatus").textContent = "";
+});
+document.getElementById("fetchUrlBtn").addEventListener("click", async () => {
+  const urlInput = document.getElementById("exUrl");
+  const st = document.getElementById("urlStatus");
+  const raw = urlInput.value.trim();
+  if (!/^https?:\/\//i.test(raw)) {
+    st.className = "status err"; st.textContent = "Enter a full https:// URL.";
+    return;
+  }
+  st.className = "status busy"; st.innerHTML = '<span class="spinner"></span> Fetching…';
+  // Ensure we have permission to read the URL host — request on demand.
+  try {
+    const granted = await chrome.permissions.request({ origins: [new URL(raw).origin + "/*"] });
+    if (!granted) {
+      st.className = "status err";
+      st.textContent = "Host permission denied — can't fetch this URL.";
+      return;
+    }
+  } catch {
+    // Older chrome versions or non-extension contexts fall through.
+  }
+  try {
+    const res = await fetch(raw, { credentials: "omit" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const html = await res.text();
+    const snippet = htmlToText(html).slice(0, URL_SNIPPET_MAX);
+    if (!snippet) throw new Error("page had no readable text");
+    exampleGuides.push({
+      kind: "url",
+      url: raw,
+      fetchedAt: Date.now(),
+      textSnippet: snippet,
+    });
+    renderExamples();
+    autoSave({ exampleGuides }, "savedExamples");
+    document.getElementById("urlForm").style.display = "none";
+    urlInput.value = "";
+    st.textContent = "";
+  } catch (e) {
+    st.className = "status err";
+    st.textContent = `Couldn't read that page (${e.message}). Try a different URL or add an inline example.`;
+  }
+});
+
+// Minimal HTML → text sanitizer. Strips scripts/styles, removes tags,
+// collapses whitespace. Not bullet-proof, but enough for help-center articles.
+function htmlToText(html) {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<head[\s\S]*?<\/head>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function renderExamples() {
@@ -243,18 +329,30 @@ function renderExamples() {
   exampleGuides.forEach((ex, i) => {
     const li = document.createElement("li");
     li.className = "example-item";
-    li.innerHTML = `
-      <div class="example-item-body">
-        <strong>${escHtml(ex.title)}</strong>
-        <span>${escHtml(ex.body)}</span>
-      </div>
-      <button title="Remove" data-i="${i}">×</button>`;
+    if (ex.kind === "url") {
+      const host = (() => { try { return new URL(ex.url).hostname; } catch { return ex.url; } })();
+      const preview = (ex.textSnippet || "").slice(0, 140);
+      li.innerHTML = `
+        <div class="example-item-body">
+          <strong><svg class="ico ico-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> ${escHtml(host)}</strong>
+          <span>${escHtml(preview)}…</span>
+        </div>
+        <button title="Remove" data-i="${i}">×</button>`;
+    } else {
+      li.innerHTML = `
+        <div class="example-item-body">
+          <strong>${escHtml(ex.title)}</strong>
+          <span>${escHtml(ex.body)}</span>
+        </div>
+        <button title="Remove" data-i="${i}">×</button>`;
+    }
     list.appendChild(li);
   });
   list.querySelectorAll("button[data-i]").forEach(btn => {
     btn.addEventListener("click", () => {
       exampleGuides.splice(Number(btn.dataset.i), 1);
       renderExamples();
+      autoSave({ exampleGuides }, "savedExamples");
     });
   });
 }
@@ -276,47 +374,130 @@ document.getElementById("screenshotQuality").addEventListener("input", function(
 });
 
 document.getElementById("clearDataBtn").addEventListener("click", async () => {
-  if (!confirm("This will delete ALL guides, steps, and screenshots. Cannot be undone.")) return;
+  const ok = await confirmModal({
+    title: "Clear all Guidr data?",
+    body: "This deletes every guide, step, recording and setting. It cannot be undone.",
+    confirmLabel: "Clear everything",
+    danger: true,
+  });
+  if (!ok) return;
   await chrome.storage.local.clear();
   // Clear IndexedDB
   indexedDB.deleteDatabase("guidr");
-  alert("All data cleared.");
+  await notifyModal({
+    title: "Cleared",
+    body: "All Guidr data has been removed from this browser.",
+    confirmLabel: "OK",
+  });
 });
 
-// ── Save buttons ───────────────────────────────────────────────────────────
+// ── Auto-save plumbing ─────────────────────────────────────────────────────
 function flashSaved(id) {
   const el = document.getElementById(id);
+  if (!el) return;
   el.classList.add("show");
   setTimeout(() => el.classList.remove("show"), 2500);
 }
 
-document.getElementById("saveProvider").addEventListener("click", () => {
-  chrome.storage.local.set({
-    provider: state.provider,
-    apiKey: document.getElementById("apiKey").value.trim(),
-    model: document.getElementById("modelSelect").value || state.model,
-    openrouterModel: document.getElementById("openrouterModel").value.trim(),
-  }, () => flashSaved("savedProvider"));
+function autoSave(patch, savedId) {
+  chrome.storage.local.set(patch, () => flashSaved(savedId));
+}
+
+// Per-section debouncer so rapid edits don't write every keystroke.
+const saveTimers = {};
+function debouncedSave(key, patch, savedId, ms = 600) {
+  clearTimeout(saveTimers[key]);
+  saveTimers[key] = setTimeout(() => autoSave(patch, savedId), ms);
+}
+
+// Provider section — selecting a card/model writes immediately.
+document.querySelectorAll(".provider-card").forEach((card) => {
+  card.addEventListener("click", () => {
+    autoSave({ provider: state.provider, model: state.model }, "savedProvider");
+  });
+});
+document.getElementById("modelSelect").addEventListener("change", () => {
+  state.model = document.getElementById("modelSelect").value;
+  autoSave({ model: state.model }, "savedProvider");
+});
+document.getElementById("openrouterModel").addEventListener("input", (e) => {
+  state.openrouterModel = e.target.value.trim();
+  debouncedSave("openrouterModel", { openrouterModel: state.openrouterModel }, "savedProvider");
 });
 
-document.getElementById("saveTone").addEventListener("click", () => {
-  chrome.storage.local.set({ toneGuide: document.getElementById("toneGuide").value.trim() },
-    () => flashSaved("savedTone"));
+// API key — only persist on blur or after a successful Test.
+document.getElementById("apiKey").addEventListener("blur", () => {
+  const key = document.getElementById("apiKey").value.trim();
+  if (!key) return;
+  autoSave({ apiKey: key }, "savedProvider");
 });
 
-document.getElementById("saveExamples").addEventListener("click", () => {
-  chrome.storage.local.set({ exampleGuides }, () => flashSaved("savedExamples"));
+// Tone — debounced on input.
+document.getElementById("toneGuide").addEventListener("input", () => {
+  debouncedSave("tone", { toneGuide: document.getElementById("toneGuide").value.trim() }, "savedTone");
 });
 
-document.getElementById("saveAdvanced").addEventListener("click", () => {
-  chrome.storage.local.set({
-    screenshotQuality: Number(document.getElementById("screenshotQuality").value),
-    maxImageWidth: Number(document.getElementById("maxImageWidth").value),
-  }, () => flashSaved("savedAdvanced"));
+// Advanced — slider + width.
+document.getElementById("screenshotQuality").addEventListener("input", () => {
+  const v = Number(document.getElementById("screenshotQuality").value);
+  debouncedSave("ssq", { screenshotQuality: v }, "savedAdvanced", 300);
+});
+document.getElementById("maxImageWidth").addEventListener("change", () => {
+  autoSave({ maxImageWidth: Number(document.getElementById("maxImageWidth").value) }, "savedAdvanced");
 });
 
 function escHtml(s) {
   return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+// ── In-page confirm / notify modal ─────────────────────────────────────────
+const modalBackdrop = document.getElementById("modalBackdrop");
+const modalTitleEl  = document.getElementById("modalTitle");
+const modalBodyEl   = document.getElementById("modalBody");
+const modalConfirm  = document.getElementById("modalConfirm");
+const modalCancel   = document.getElementById("modalCancel");
+let modalResolver = null;
+
+function closeModal(result) {
+  modalBackdrop.classList.remove("open");
+  document.removeEventListener("keydown", onModalKey);
+  if (modalResolver) { modalResolver(result); modalResolver = null; }
+}
+function onModalKey(e) {
+  if (e.key === "Escape") closeModal(false);
+  else if (e.key === "Enter") closeModal(true);
+}
+modalCancel.addEventListener("click", () => closeModal(false));
+modalConfirm.addEventListener("click", () => closeModal(true));
+modalBackdrop.addEventListener("click", (e) => {
+  if (e.target === modalBackdrop) closeModal(false);
+});
+
+function confirmModal({ title, body, confirmLabel = "OK", cancelLabel = "Cancel", danger = false }) {
+  modalTitleEl.textContent = title;
+  modalBodyEl.textContent  = body;
+  modalConfirm.textContent = confirmLabel;
+  modalCancel.textContent  = cancelLabel;
+  modalConfirm.classList.toggle("danger", danger);
+  modalConfirm.classList.toggle("primary", !danger);
+  modalCancel.style.display = "";
+  modalBackdrop.classList.add("open");
+  document.addEventListener("keydown", onModalKey);
+  modalConfirm.focus();
+  return new Promise((resolve) => { modalResolver = resolve; });
+}
+
+function notifyModal({ title, body, confirmLabel = "OK" }) {
+  modalTitleEl.textContent = title;
+  modalBodyEl.textContent  = body;
+  modalConfirm.textContent = confirmLabel;
+  modalConfirm.classList.remove("danger");
+  modalConfirm.classList.add("primary");
+  modalCancel.style.display = "none";
+  modalBackdrop.classList.add("open");
+  document.addEventListener("keydown", onModalKey);
+  modalConfirm.focus();
+  return new Promise((resolve) => { modalResolver = resolve; });
 }
 
 // ── Branding (annotation color customization) ─────────────────────────────
@@ -337,6 +518,12 @@ function applyBrandingToInputs() {
 
 const HEX_RE = /^#([0-9a-fA-F]{6})$/;
 
+function persistBranding() {
+  const payload = {};
+  BRAND_FIELDS.forEach(({ key }) => { payload[key] = state[key] || BRAND_DEFAULTS[key]; });
+  debouncedSave("branding", payload, "savedBranding", 400);
+}
+
 BRAND_FIELDS.forEach(({ key, pickerId, hexId }) => {
   const picker = document.getElementById(pickerId);
   const hexIn  = document.getElementById(hexId);
@@ -344,6 +531,7 @@ BRAND_FIELDS.forEach(({ key, pickerId, hexId }) => {
     state[key] = picker.value;
     hexIn.value = picker.value;
     drawBrandPreview();
+    persistBranding();
   });
   hexIn.addEventListener("input", () => {
     const v = hexIn.value.trim();
@@ -351,19 +539,15 @@ BRAND_FIELDS.forEach(({ key, pickerId, hexId }) => {
       state[key] = v.toLowerCase();
       picker.value = state[key];
       drawBrandPreview();
+      persistBranding();
     }
   });
-});
-
-document.getElementById("saveBranding").addEventListener("click", () => {
-  const payload = {};
-  BRAND_FIELDS.forEach(({ key }) => { payload[key] = state[key] || BRAND_DEFAULTS[key]; });
-  chrome.storage.local.set(payload, () => flashSaved("savedBranding"));
 });
 
 document.getElementById("resetBranding").addEventListener("click", () => {
   Object.assign(state, BRAND_DEFAULTS);
   applyBrandingToInputs();
+  persistBranding();
 });
 
 function drawBrandPreview() {
@@ -374,7 +558,7 @@ function drawBrandPreview() {
   ctx.clearRect(0, 0, W, H);
 
   // Subtle backdrop grid
-  ctx.fillStyle = "#191921";
+  ctx.fillStyle = "#17171f";
   ctx.fillRect(0, 0, W, H);
 
   // Highlight box on the left

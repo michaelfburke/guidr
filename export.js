@@ -16,10 +16,29 @@
  *  - "json"      → raw session JSON (no media blobs)
  */
 
+const BRAND_DEFAULTS = {
+  brandCircleColor:    "#7c6af7",
+  brandArrowColor:     "#f87171",
+  brandHighlightColor: "#fbbf24",
+};
+
+async function loadBranding() {
+  // Reads brand colors from chrome.storage so each export reflects the
+  // user's current settings without having to plumb them through every
+  // caller. Falls back to defaults outside an extension context.
+  if (typeof chrome === "undefined" || !chrome.storage?.local) return BRAND_DEFAULTS;
+  return new Promise((resolve) => {
+    chrome.storage.local.get(Object.keys(BRAND_DEFAULTS), (data) => {
+      resolve({ ...BRAND_DEFAULTS, ...data });
+    });
+  });
+}
+
 export async function exportSession(session, format) {
+  const branding = await loadBranding();
   switch (format) {
     case "markdown":  return exportMarkdown(session);
-    case "html":      return exportHtml(session);
+    case "html":      return exportHtml(session, branding);
     case "intercom":  return exportIntercom(session);
     case "json":      return exportJson(session);
     default:          throw new Error(`Unknown format: ${format}`);
@@ -52,7 +71,7 @@ function exportMarkdown(session) {
 
 // ─── HTML ─────────────────────────────────────────────────────────────────────
 
-function exportHtml(session) {
+function exportHtml(session, branding = BRAND_DEFAULTS) {
   const stepsHtml = session.steps
     .map(
       (step, i) => `
@@ -71,6 +90,9 @@ function exportHtml(session) {
     )
     .join("\n");
 
+  const circleColor    = branding.brandCircleColor    || BRAND_DEFAULTS.brandCircleColor;
+  const highlightColor = branding.brandHighlightColor || BRAND_DEFAULTS.brandHighlightColor;
+
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -82,13 +104,14 @@ function exportHtml(session) {
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
            line-height: 1.6; color: #1a1a1a; background: #fafafa; padding: 2rem; }
     .guide { max-width: 800px; margin: 0 auto; }
-    h1 { font-size: 2rem; margin-bottom: 0.5rem; }
-    .meta { color: #666; font-size: 0.875rem; margin-bottom: 2.5rem; }
+    h1 { font-size: 2rem; margin-bottom: 0.25rem;
+         border-bottom: 3px solid ${highlightColor}; padding-bottom: 0.5rem; display: inline-block; }
+    .meta { color: #666; font-size: 0.875rem; margin: 0.5rem 0 2.5rem; }
     .step { display: flex; gap: 1.5rem; margin-bottom: 2.5rem;
             background: #fff; border-radius: 12px; padding: 1.5rem;
             box-shadow: 0 1px 4px rgba(0,0,0,.08); }
     .step-number { flex-shrink: 0; width: 36px; height: 36px; border-radius: 50%;
-                   background: #6366f1; color: #fff; font-weight: 700;
+                   background: ${circleColor}; color: #fff; font-weight: 700;
                    display: flex; align-items: center; justify-content: center; }
     .step-content h2 { font-size: 1.125rem; margin-bottom: 0.5rem; }
     .step-content p { color: #444; margin-bottom: 1rem; }

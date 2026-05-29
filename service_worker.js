@@ -43,6 +43,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     SP_DELETE_SESSION:     () => handleDeleteSession(msg, sendResponse),
     SP_REORDER_STEPS:      () => handleReorderSteps(msg, sendResponse),
     SP_UPDATE_STEP:        () => handleUpdateStep(msg, sendResponse),
+    SP_UPDATE_SESSION:     () => handleUpdateSession(msg, sendResponse),
     SP_GET_RECORDING:      () => handleGetRecording(msg, sendResponse),
     SP_DELETE_RECORDING:   () => handleDeleteRecording(msg, sendResponse),
     SP_GEN_SCRIPT:         () => handleGenScript(msg, sendResponse),
@@ -251,6 +252,14 @@ async function handleUpdateStep({ stepId, updates }, sendResponse) {
   const updated = { ...step, ...updates };
   await db.saveStep(updated);
   sendResponse({ ok: true, step: updated });
+}
+
+async function handleUpdateSession({ sessionId, updates }, sendResponse) {
+  const session = await db.getSession(sessionId);
+  if (!session) { sendResponse({ ok: false }); return; }
+  const updated = { ...session, ...updates, updatedAt: Date.now() };
+  await db.saveSession(updated);
+  sendResponse({ ok: true, session: updated });
 }
 
 // ─── Recording fetch / delete ────────────────────────────────────────────────
