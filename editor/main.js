@@ -28,24 +28,25 @@ const GIF_SIZE_WARN_BYTES = 3 * 1024 * 1024;
 function $(id) { return document.getElementById(id); }
 
 const sessionNameEl   = $("sessionName");
-const stepListEl      = $("stepList");
-const stepListHeader  = $("stepListHeader");
+const filmstrip       = $("filmstrip");
+const frameImg        = $("frameImg");
+const frameEmpty      = $("frameEmpty");
 const srcVideo        = $("srcVideo");
-const videoPane       = $("videoPane");
+const frameView       = $("frameView");
 const narrationAudio  = $("narrationAudio");
 const narrationVol    = $("narrationVol");
 const narrationVolume = $("narrationVolume");
 const narrationMute   = $("narrationMute");
 const sessionMoreBtn  = $("sessionMoreBtn");
 const sessionMoreMenu = $("sessionMoreMenu");
-const chapterRail     = $("chapterRail");
 const stepSkipToggle  = $("stepSkipToggle");
 const stepMoreBtn     = $("stepMoreBtn");
 const stepMoreMenu    = $("stepMoreMenu");
 const stepTs          = $("stepTs");
+const stepNum         = $("stepNum");
+const stepOf          = $("stepOf");
 const stepTitle       = $("stepTitle");
 const stepBody        = $("stepBody");
-const stepCounter     = $("stepCounter");
 const prevBtn         = $("prevBtn");
 const nextBtn         = $("nextBtn");
 const exportBtn       = $("exportBtn");
@@ -108,8 +109,7 @@ async function initEditor() {
   sessionNameEl.value = res.session.name;
   document.title = res.session.name + " — Guidr";
 
-  renderStepList();
-  renderChapterRail();
+  renderFilmstrip();
   if (steps.length) loadStepIntoEditor(0);
 
   loadRecordingIntoPlayers(sessionId)
@@ -123,30 +123,7 @@ function normalizeStep(s) {
   return { included: true, mediaMode: "screenshot", ...s };
 }
 
-// ── Step list (left column) ────────────────────────────────────────────────
-function renderStepList() {
-  const included = steps.filter(s => s.included !== false).length;
-  stepListHeader.textContent = `${steps.length} step${steps.length !== 1 ? "s" : ""} · ${included} included`;
-  stepListEl.innerHTML = "";
-  steps.forEach((step, i) => {
-    const item = document.createElement("div");
-    item.className = `step-item${i === currentStepIdx ? " active" : ""}${step.included === false ? " excluded" : ""}`;
-    item.dataset.idx = i;
-    const cached = thumbCache.get(step.id);
-    const rawLabel = step.title || step.target?.text || step.target?.ariaLabel || step.pageTitle || "";
-    const label = rawLabel.trim().slice(0, 50) || `Step ${i + 1}`;
-    item.innerHTML = `
-      <div class="step-item-thumb">${cached
-        ? `<img src="${cached}" alt="" loading="lazy"/>`
-        : `<span class="step-item-n">${i + 1}</span>`}</div>
-      <div class="step-item-body">
-        <div class="step-item-title">${escHtml(label)}</div>
-        <div class="step-item-ts">${formatMs(step.tsMs)}</div>
-      </div>`;
-    item.addEventListener("click", () => loadStepIntoEditor(i));
-    stepListEl.appendChild(item);
-  });
-}
+
 
 // ── Recording into players ─────────────────────────────────────────────────
 async function loadRecordingIntoPlayers(sid) {
@@ -158,16 +135,12 @@ async function loadRecordingIntoPlayers(sid) {
   const rec = await db.getRecording(sid);
   if (!rec?.blob) {
     srcVideo.removeAttribute("src");
-    srcVideo.style.display = "none";
     extractor.removeAttribute("src");
-    videoPane.classList.add("empty");
     return;
   }
-  videoPane.classList.remove("empty");
   recordingObjectUrl = URL.createObjectURL(rec.blob);
   extractorObjectUrl = URL.createObjectURL(rec.blob);
   srcVideo.src = recordingObjectUrl;
-  srcVideo.style.display = "";
   extractor.src = extractorObjectUrl;
 
   await Promise.race([
@@ -180,24 +153,30 @@ async function loadRecordingIntoPlayers(sid) {
   ]);
 }
 
-// ── Chapter rail ──────────────────────────────────────────────────────────
-function renderChapterRail() {
-  chapterRail.innerHTML = "";
+// ── Filmstrip ─────────────────────────────────────────────────────────────
+function renderFilmstrip() {
+  filmstrip.innerHTML = "";
   steps.forEach((step, i) => {
     const chip = document.createElement("div");
     chip.className = `chip${i === currentStepIdx ? " active" : ""}${step.included === false ? " excluded" : ""}`;
     chip.dataset.idx = i;
     chip.dataset.id  = step.id;
     const cached = thumbCache.get(step.id);
+    const rawLabel = step.title || step.target?.text || step.target?.ariaLabel || step.pageTitle || "";
+    const label = rawLabel.trim().slice(0, 32) || `Step ${i + 1}`;
     chip.innerHTML = `
       <img class="chip-thumb" src="${cached || ""}" alt=""/>
       <div class="chip-meta">
         <span class="chip-num">${i + 1}</span>
         <span class="chip-time">${formatMs(step.tsMs)}</span>
-      </div>`;
+      </div>
+      <div class="chip-title">${escHtml(label)}</div>`;
     chip.addEventListener("click", () => loadStepIntoEditor(i));
-    chapterRail.appendChild(chip);
+    filmstrip.appendChild(chip);
   });
+  // scroll active chip into view
+  const active = filmstrip.querySelector(".chip.active");
+  if (active) active.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
 }
 
 async function populateRailThumbnails() {
@@ -207,14 +186,24 @@ async function populateRailThumbnails() {
     try {
       const dataUrl = await extractFrame(step.tsMs);
       thumbCache.set(step.id, dataUrl);
-      const chip = chapterRail.querySelector(`.chip[data-id="${step.id}"] .chip-thumb`);
+      const chip = filmstrip.querySelector(`.chip[data-id="${step.id}"] .chip-thumb`);
       if (chip) chip.src = dataUrl;
-      const idx  = steps.indexOf(step);
-      const item = stepListEl.querySelector(`.step-item[data-idx="${idx}"] .step-item-thumb`);
-      if (item) item.innerHTML = `<img src="${dataUrl}" alt="" loading="lazy"/>`;
+      // update the large frame view if this is the current step
+      if (steps[currentStepIdx]?.id === step.id) setFrameImg(dataUrl);
     } catch (err) {
       console.warn("[Guidr] thumb extraction failed for step", step.index, ":", err.message);
     }
+  }
+}
+
+function setFrameImg(src) {
+  frameImg.classList.remove("loading");
+  if (src) {
+    frameImg.src = src;
+    frameEmpty.style.display = "none";
+  } else {
+    frameImg.src = "";
+    frameEmpty.style.display = "";
   }
 }
 
@@ -238,10 +227,35 @@ function loadStepIntoEditor(idx) {
 
   prevBtn.disabled = idx === 0;
   nextBtn.disabled = idx === steps.length - 1;
-  stepCounter.textContent = `${idx + 1} / ${steps.length}`;
+  stepNum.textContent = String(idx + 1).padStart(2, "0");
+  stepOf.textContent  = `of ${steps.length}`;
 
-  renderChapterRail();
-  renderStepList();
+  // show GIF video source or extracted frame
+  const isGif = step.mediaMode === "gif";
+  srcVideo.classList.toggle("gif-mode", isGif);
+  if (isGif) {
+    frameEmpty.style.display = "none";
+  } else {
+    const cached = thumbCache.get(step.id);
+    if (cached) {
+      setFrameImg(cached);
+    } else if (extractor.src) {
+      frameImg.classList.add("loading");
+      frameEmpty.style.display = "";
+      extractFrame(step.tsMs)
+        .then(dataUrl => {
+          thumbCache.set(step.id, dataUrl);
+          if (steps[currentStepIdx]?.id === step.id) setFrameImg(dataUrl);
+          const chip = filmstrip.querySelector(`.chip[data-id="${step.id}"] .chip-thumb`);
+          if (chip) chip.src = dataUrl;
+        })
+        .catch(() => {});
+    } else {
+      setFrameImg(null);
+    }
+  }
+
+  renderFilmstrip();
 }
 
 function loadStepFields(step) {
@@ -272,8 +286,7 @@ stepSkipToggle.addEventListener("click", () => {
   if (!step) return;
   step.included = !(step.included !== false);
   applySkipToggleState(step.included);
-  renderChapterRail();
-  renderStepList();
+  renderFilmstrip();
   saveCurrentStep();
 });
 
@@ -584,8 +597,7 @@ function onStepEnriched(step) {
   const i = steps.findIndex(s => s.id === step.id);
   if (i !== -1) steps[i] = step;
   if (steps[currentStepIdx]?.id === step.id) loadStepFields(step);
-  renderChapterRail();
-  renderStepList();
+  renderFilmstrip();
 }
 
 chrome.runtime.onMessage.addListener((msg) => {
@@ -900,7 +912,7 @@ $("sessDeleteItem").addEventListener("click", async () => {
   setTimeout(() => window.close(), 800);
 });
 
-$("btn-options").addEventListener("click", () => chrome.runtime.openOptionsPage());
+$('sessSettingsItem').addEventListener('click', () => { sessionMoreMenu.classList.remove('open'); chrome.runtime.openOptionsPage(); });
 
 // ── Narration sync ────────────────────────────────────────────────────────
 function bindNarrationSync() {
@@ -941,7 +953,7 @@ async function loadNarrationIntoPlayer(sid) {
 
 function setNarrationOverlayVisible(visible) {
   narrationVol.hidden = !visible;
-  videoPane.classList.toggle("has-voice", !!visible);
+  frameView.classList.toggle("has-voice", !!visible);
 }
 
 async function applyStoredNarrationVolume() {
@@ -1180,7 +1192,7 @@ async function doDocumentExport(fmt, action = "download") {
 // ── Keyboard shortcuts ────────────────────────────────────────────────────
 function openHelp()  { helpBackdrop.classList.add("open");    }
 function closeHelp() { helpBackdrop.classList.remove("open"); }
-$("helpBtn").addEventListener("click", openHelp);
+$('helpMenuItem').addEventListener('click', () => { sessionMoreMenu.classList.remove('open'); openHelp(); });
 $("helpClose").addEventListener("click", closeHelp);
 helpBackdrop.addEventListener("click", (e) => { if (e.target === helpBackdrop) closeHelp(); });
 

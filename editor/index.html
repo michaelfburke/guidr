@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Guidr Editor</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700\&family=JetBrains+Mono:wght@400;500\&display=swap" rel="stylesheet"/>
   <style>
     :root {
       --bg:      #09090e;
@@ -26,272 +26,72 @@
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; overflow: hidden; }
-    body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 13px; display: flex; flex-direction: column; }
-
+    body {
+      background: var(--bg); color: var(--text); font-family: var(--font);
+      font-size: 13px; display: flex; flex-direction: column;
+    }
     :focus { outline: none; }
     button:focus-visible, a:focus-visible, input:focus-visible,
     select:focus-visible, textarea:focus-visible, [role="switch"]:focus-visible,
     [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-
     .ico { width: 1em; height: 1em; vertical-align: -0.15em; flex-shrink: 0; display: inline-block; }
-    .ico-14 { width: 14px; height: 14px; }
 
-    /* ── Topbar ── */
+    /* Topbar */
     .topbar {
-      display: flex; align-items: center;
-      padding: 8px 12px; border-bottom: 1px solid var(--border);
-      flex-shrink: 0; background: var(--s1); gap: 6px;
+      display: flex; align-items: center; gap: 8px;
+      padding: 0 16px; height: 52px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0; background: var(--s1);
     }
     .logo {
       font-size: 15px; font-weight: 700; color: #fff; letter-spacing: -0.5px;
-      background: none; border: none; cursor: pointer; padding: 0;
+      background: none; border: none; cursor: default; padding: 0;
       font-family: var(--font); display: inline-flex; align-items: center;
-      flex-shrink: 0; text-decoration: none;
+      flex-shrink: 0; user-select: none;
     }
     .logo em { color: var(--accent); font-style: normal; }
+    .topbar-divider { width: 1px; height: 18px; background: var(--border2); flex-shrink: 0; margin: 0 2px; }
     .topbar-name {
       flex: 1; min-width: 0;
       background: transparent; border: 1px solid transparent;
-      border-radius: 7px; padding: 5px 8px;
+      border-radius: 7px; padding: 6px 10px;
       color: var(--text); font-family: var(--font);
-      font-size: 13px; font-weight: 600;
+      font-size: 14px; font-weight: 700;
       outline: none; transition: border-color 0.13s, background 0.13s;
     }
     .topbar-name::placeholder { color: var(--muted); font-weight: 500; }
     .topbar-name:hover { border-color: var(--border2); }
     .topbar-name:focus { border-color: var(--accent); background: var(--s2); }
-    .topbar-right { display: flex; gap: 4px; flex-shrink: 0; align-items: center; }
+    .topbar-right { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
     .iBtn {
       background: none; border: 1px solid var(--border); cursor: pointer; color: var(--muted);
-      padding: 5px 10px; border-radius: 6px; font-size: 11px; font-weight: 600;
-      letter-spacing: 0.04em; line-height: 1.2; transition: all 0.12s;
-      font-family: var(--font);
+      padding: 6px 10px; border-radius: 6px; font-size: 11px; font-weight: 600;
+      letter-spacing: 0.04em; transition: all 0.12s; font-family: var(--font);
     }
     .iBtn:hover { color: var(--text); background: var(--s3); }
-    .iBtn-icon { padding: 5px 9px; font-size: 14px; font-weight: 700; letter-spacing: 0; }
 
-    /* ── Three-column editor layout ── */
-    .editor-layout {
-      flex: 1; display: flex; overflow: hidden; min-height: 0;
-    }
-
-    /* Left: step list */
-    .step-list-panel {
-      width: 220px; flex-shrink: 0;
-      display: flex; flex-direction: column;
-      border-right: 1px solid var(--border);
-      overflow: hidden;
-    }
-    .step-list-header {
-      padding: 9px 12px; flex-shrink: 0;
-      font-size: 10px; font-weight: 600; text-transform: uppercase;
-      letter-spacing: 0.1em; color: var(--muted);
-      border-bottom: 1px solid var(--border);
-    }
-    #stepList { flex: 1; overflow-y: auto; }
-    #stepList::-webkit-scrollbar { width: 3px; }
-    #stepList::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 99px; }
-    .step-item {
-      display: flex; gap: 8px; padding: 8px 10px;
-      cursor: pointer; border-bottom: 1px solid var(--border);
-      transition: background 0.13s; align-items: flex-start;
-    }
-    .step-item:hover { background: var(--s2); }
-    .step-item.active { background: var(--s3); border-left: 2px solid var(--accent); padding-left: 8px; }
-    .step-item.excluded { opacity: 0.45; }
-    .step-item-thumb {
-      width: 56px; height: 36px; border-radius: 4px; overflow: hidden;
-      background: var(--s3); flex-shrink: 0;
-      display: flex; align-items: center; justify-content: center;
-    }
-    .step-item-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .step-item-n { font-size: 11px; font-weight: 700; color: var(--accent); }
-    .step-item-body { flex: 1; min-width: 0; }
-    .step-item-title {
-      font-size: 11px; color: var(--text);
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    .step-item-ts { font-family: var(--mono); font-size: 9px; color: var(--muted); margin-top: 2px; }
-
-    /* Center: video + rail + annotation overlay */
-    .video-center {
-      flex: 1; display: flex; flex-direction: column;
-      position: relative; overflow: hidden; min-width: 0;
-    }
-    .video-pane {
-      flex: 1; background: #000;
-      border-bottom: 1px solid var(--border);
-      display: flex; align-items: center; justify-content: center;
-      position: relative; overflow: hidden; min-height: 0;
-    }
-    .video-pane.empty #srcVideo { display: none; }
-    #srcVideo { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
-
-    /* Narration volume overlay */
-    .narration-vol {
-      position: absolute; top: 8px; right: 8px; z-index: 5;
-      display: none; align-items: center; gap: 6px;
-      background: rgba(0,0,0,0.55); border-radius: 999px;
-      padding: 4px 8px 4px 4px; opacity: 0.5; transition: opacity 0.15s;
-    }
-    .narration-vol[hidden] { display: none !important; }
-    .video-pane.has-voice .narration-vol { display: flex; }
-    .video-pane:hover .narration-vol, .narration-vol:focus-within { opacity: 1; }
-    .narration-vol .nv-btn {
-      background: transparent; border: none; cursor: pointer;
-      color: #fff; padding: 3px; line-height: 0;
-      display: inline-flex; align-items: center; justify-content: center; border-radius: 50%;
-    }
-    .narration-vol .nv-btn:hover { background: rgba(255,255,255,0.12); }
-    .narration-vol .nv-btn .ico { width: 15px; height: 15px; }
-    .narration-vol .nv-btn .nv-ico-off { display: none; }
-    .narration-vol.muted .nv-ico-on  { display: none; }
-    .narration-vol.muted .nv-ico-off { display: inline-block; }
-    .narration-vol input[type="range"] { width: 72px; accent-color: var(--accent); cursor: pointer; }
-
-    /* Chapter rail */
-    .chapter-rail {
-      display: flex; align-items: center; gap: 4px;
-      padding: 6px 10px; overflow-x: auto;
-      background: var(--s1); border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
-      scrollbar-width: thin; scrollbar-color: var(--border) transparent;
-    }
-    .chapter-rail::-webkit-scrollbar { height: 3px; }
-    .chapter-rail::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 99px; }
-    .chip {
-      flex-shrink: 0; display: flex; flex-direction: column; align-items: stretch;
-      background: var(--s2); border: 2px solid var(--border2); color: var(--muted);
-      width: 80px; border-radius: 8px; overflow: hidden; cursor: pointer;
-      font-family: var(--mono); font-size: 10px; transition: all 0.13s; padding: 0;
-    }
-    .chip:hover { color: var(--text); border-color: var(--accent); }
-    .chip.active { border-color: var(--accent); }
-    .chip.active .chip-meta { background: var(--accentd); color: var(--text); }
-    .chip.excluded { opacity: 0.5; position: relative; }
-    .chip.excluded::after {
-      content: "excluded"; position: absolute; top: 4px; left: 4px;
-      background: rgba(0,0,0,0.75); color: #fff;
-      font-family: var(--mono); font-size: 8px; font-weight: 600;
-      padding: 1px 5px; border-radius: 3px; letter-spacing: 0.04em; text-transform: uppercase;
-    }
-    .chip-thumb { width: 100%; height: 46px; object-fit: cover; background: var(--s3); display: block; }
-    .chip-meta {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 3px 6px; gap: 4px; background: var(--s2);
-      transition: background 0.13s, color 0.13s;
-    }
-    .chip-num {
-      width: 14px; height: 14px; border-radius: 50%; background: var(--accentd);
-      color: var(--accent); font-size: 9px; font-weight: 700;
-      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-    }
-    .chip.active .chip-num { background: var(--accent); color: #fff; }
-    .chip-time { font-family: var(--mono); font-size: 9px; }
-
-    /* Annotation pane — absolute overlay over the entire center column */
-    .annot-pane {
-      position: absolute; inset: 0; z-index: 20;
-      background: var(--bg); display: none; flex-direction: column; padding: 8px;
-    }
-    .annot-pane.active { display: flex; }
-    .annot-toolbar {
-      display: flex; align-items: center; gap: 4px;
-      padding: 0 0 8px; flex-shrink: 0;
-    }
-    .annot-tool {
-      background: var(--s2); border: 1px solid var(--border2); color: var(--text);
-      display: inline-flex; align-items: center; justify-content: center;
-      padding: 6px; border-radius: 6px; cursor: pointer; transition: all 0.13s;
-    }
-    .annot-tool .ico { width: 14px; height: 14px; }
-    .annot-tool:hover { border-color: var(--accent); }
-    .annot-tool.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-    .annot-tool.right { margin-left: auto; }
-    .annot-hint {
-      font-family: var(--mono); font-size: 10px; color: var(--muted);
-      padding: 0 0 6px; min-height: 14px; line-height: 1.4; flex-shrink: 0;
-    }
-    .annot-canvas-wrap {
-      flex: 1; min-height: 0; overflow: auto;
-      background: var(--s1); border-radius: 6px;
-    }
-    .annot-canvas { display: block; width: 100%; height: auto; }
-
-    /* Right: step editor */
-    .step-editor-panel {
-      width: 360px; flex-shrink: 0;
-      display: flex; flex-direction: column;
-      border-left: 1px solid var(--border);
-      overflow: hidden;
-    }
-    .step-editor-body {
-      flex: 1; overflow-y: auto; padding: 12px;
-      display: flex; flex-direction: column; gap: 12px;
-    }
-    .step-editor-body::-webkit-scrollbar { width: 4px; }
-    .step-editor-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 99px; }
-    .step-nav-footer {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 10px 12px; border-top: 1px solid var(--border); flex-shrink: 0;
-    }
-    .nav-btn {
-      background: none; border: 1px solid var(--border2); color: var(--muted);
-      cursor: pointer; font-family: var(--font); font-size: 12px; font-weight: 600;
-      padding: 5px 12px; border-radius: 6px; transition: all 0.13s;
-    }
-    .nav-btn:hover:not(:disabled) { color: var(--text); border-color: var(--accent); }
-    .nav-btn:disabled { opacity: 0.3; cursor: default; }
-    .step-counter { font-family: var(--mono); font-size: 11px; color: var(--muted); }
-
-    /* Step controls */
-    .step-controls {
-      display: flex; align-items: center; gap: 10px;
-      padding: 8px 10px; background: var(--s2); border: 1px solid var(--border2); border-radius: 9px;
-    }
-    .skip-toggle {
-      display: inline-flex; align-items: center; gap: 8px;
-      background: var(--s3); border: 1px solid var(--border2); color: var(--text);
-      font-family: var(--font); font-size: 12px; font-weight: 600;
-      padding: 4px 10px 4px 4px; border-radius: 999px; cursor: pointer; transition: all 0.13s;
-    }
-    .skip-toggle:hover { border-color: var(--accent); }
-    .skip-toggle .switch-track {
-      width: 26px; height: 16px; border-radius: 999px; background: var(--accent);
-      position: relative; transition: background 0.15s; flex-shrink: 0;
-    }
-    .skip-toggle .switch-thumb {
-      position: absolute; top: 2px; left: 12px; width: 12px; height: 12px;
-      border-radius: 50%; background: #fff; transition: left 0.15s;
-    }
-    .skip-toggle.skipped { color: var(--muted); }
-    .skip-toggle.skipped .switch-track { background: var(--border2); }
-    .skip-toggle.skipped .switch-thumb { left: 2px; background: var(--muted); }
-    .step-controls .ts-readout {
-      font-family: var(--mono); font-size: 11px; color: var(--muted); margin-left: auto;
-    }
-
-    /* Overflow menus (step more, session more) */
+    /* Overflow menus */
     .overflow-wrap { position: relative; }
     .overflow-btn {
       background: none; border: 1px solid var(--border2); color: var(--muted);
-      cursor: pointer; font-size: 16px; line-height: 1;
-      padding: 4px 9px; border-radius: 6px; transition: all 0.13s; font-family: var(--font);
+      cursor: pointer; font-size: 18px; line-height: 1;
+      padding: 5px 10px; border-radius: 6px; transition: all 0.13s; font-family: var(--font);
+      display: inline-flex; align-items: center;
     }
     .overflow-btn:hover { color: var(--text); border-color: var(--accent); }
     .overflow-menu {
-      position: absolute; right: 0; top: calc(100% + 4px); z-index: 50;
+      position: absolute; right: 0; top: calc(100% + 6px); z-index: 50;
       background: var(--s2); border: 1px solid var(--border2);
-      border-radius: 8px; padding: 4px; min-width: 210px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.4); display: none;
+      border-radius: 10px; padding: 4px; min-width: 220px;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.5); display: none;
     }
     .overflow-menu.open { display: block; }
     .overflow-menu .menu-item {
-      display: flex; align-items: center; gap: 8px;
-      padding: 8px 10px; border-radius: 6px; cursor: pointer;
+      display: flex; align-items: center; gap: 9px;
+      padding: 9px 11px; border-radius: 7px; cursor: pointer;
       font-size: 12px; color: var(--text); transition: background 0.1s;
     }
-    .overflow-menu .menu-item .ico { width: 14px; height: 14px; color: var(--muted); }
+    .overflow-menu .menu-item .ico { width: 14px; height: 14px; color: var(--muted); flex-shrink: 0; }
     .overflow-menu .menu-item:hover .ico { color: var(--text); }
     .overflow-menu .menu-item.danger .ico { color: var(--error); }
     .overflow-menu .menu-item:hover { background: var(--s3); }
@@ -299,12 +99,214 @@
     .overflow-menu .menu-item.danger:hover { background: rgba(248,113,113,0.1); }
     .overflow-menu .sep { height: 1px; background: var(--border); margin: 4px 0; }
 
-    /* Gen row (enrich / annotate) */
+    /* Export */
+    .export-wrap { position: relative; }
+    .btn-export {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--accent); color: #fff; border: none;
+      border-radius: 8px; padding: 8px 16px; min-width: 100px; justify-content: center;
+      font-family: var(--font); font-size: 12px; font-weight: 700;
+      cursor: pointer; transition: filter 0.15s, transform 0.1s; letter-spacing: 0.02em;
+    }
+    .btn-export:hover { filter: brightness(1.1); transform: translateY(-1px); }
+    .btn-export:active { transform: translateY(0); }
+    .export-menu {
+      position: absolute; right: 0; top: calc(100% + 6px); z-index: 100;
+      background: var(--s2); border: 1px solid var(--border2);
+      border-radius: 12px; padding: 6px; min-width: 320px;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.6); display: none;
+    }
+    .export-menu.open { display: block; }
+    .export-summary { font-size: 11px; color: var(--muted); padding: 4px 10px 8px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+    .export-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 10px; border-radius: 8px; transition: background 0.1s; gap: 12px;
+    }
+    .export-row:hover { background: var(--s3); }
+    .export-row-body strong { display: block; font-size: 12px; color: var(--text); }
+    .export-row-body span { font-size: 11px; color: var(--muted); }
+    .export-row-actions { display: flex; gap: 4px; flex-shrink: 0; }
+    .export-sep { height: 1px; background: var(--border); margin: 4px 6px; }
+    .btn-row {
+      background: var(--s3); border: 1px solid var(--border2); color: var(--text);
+      border-radius: 6px; padding: 5px 11px;
+      font-family: var(--font); font-size: 11px; font-weight: 600;
+      cursor: pointer; transition: all 0.12s; white-space: nowrap;
+    }
+    .btn-row:hover { border-color: var(--accent); background: var(--s2); }
+    .btn-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .btn-row:disabled { opacity: 0.4; cursor: default; }
+    .btn-row-icon { padding: 5px 9px; }
+
+    /* Main layout grid */
+    .editor-layout {
+      flex: 1; display: grid;
+      grid-template-columns: 1fr 440px;
+      grid-template-rows: 1fr 96px;
+      overflow: hidden; min-height: 0;
+    }
+
+    /* Frame view */
+    .frame-view {
+      grid-column: 1; grid-row: 1;
+      position: relative; overflow: hidden;
+      background: #0a0a10;
+      display: flex; align-items: center; justify-content: center;
+      border-right: 1px solid var(--border);
+    }
+    .frame-view::before {
+      content: ""; position: absolute; inset: 0; pointer-events: none;
+      background-image:
+        linear-gradient(rgba(124,106,247,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(124,106,247,0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+    .frame-img {
+      position: relative; z-index: 2;
+      max-width: calc(100% - 48px); max-height: calc(100% - 48px);
+      object-fit: contain; display: block;
+      border-radius: 4px;
+      box-shadow: 0 8px 48px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06);
+      transition: opacity 0.2s;
+    }
+    .frame-img.loading { opacity: 0.4; }
+    .frame-img[src=""] { display: none; }
+    .frame-empty {
+      position: absolute; z-index: 3;
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      color: var(--muted); font-size: 12px; pointer-events: none;
+    }
+    .frame-empty .fe-icon {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: var(--s2); border: 1px solid var(--border2);
+      display: flex; align-items: center; justify-content: center; color: var(--border2);
+    }
+    .frame-empty .fe-icon svg { width: 18px; height: 18px; }
+    #srcVideo {
+      position: absolute; z-index: 4;
+      bottom: 0; left: 0; width: 100%;
+      max-height: 45%; object-fit: contain;
+      background: #000; border-top: 1px solid var(--border); display: none;
+    }
+    #srcVideo.gif-mode { display: block; }
+    .narration-vol {
+      position: absolute; top: 12px; right: 12px; z-index: 8;
+      display: none; align-items: center; gap: 6px;
+      background: rgba(9,9,14,0.75); backdrop-filter: blur(8px);
+      border: 1px solid var(--border2); border-radius: 999px;
+      padding: 5px 10px 5px 6px; opacity: 0.55; transition: opacity 0.15s;
+    }
+    .narration-vol[hidden] { display: none !important; }
+    .frame-view.has-voice .narration-vol { display: flex; }
+    .frame-view:hover .narration-vol, .narration-vol:focus-within { opacity: 1; }
+    .narration-vol .nv-btn {
+      background: transparent; border: none; cursor: pointer;
+      color: #fff; padding: 3px; line-height: 0;
+      display: inline-flex; align-items: center; justify-content: center; border-radius: 50%;
+    }
+    .narration-vol .nv-btn:hover { background: rgba(255,255,255,0.1); }
+    .narration-vol .nv-btn .ico { width: 14px; height: 14px; }
+    .narration-vol .nv-btn .nv-ico-off { display: none; }
+    .narration-vol.muted .nv-ico-on  { display: none; }
+    .narration-vol.muted .nv-ico-off { display: inline-block; }
+    .narration-vol input[type="range"] { width: 72px; accent-color: var(--accent); cursor: pointer; }
+
+    /* Annotation pane */
+    .annot-pane {
+      position: absolute; inset: 0; z-index: 20;
+      display: none; flex-direction: column;
+      background: rgba(9,9,14,0.92); backdrop-filter: blur(2px);
+    }
+    .annot-pane.active { display: flex; }
+    .annot-toolbar {
+      flex-shrink: 0; display: flex; align-items: center; gap: 6px;
+      margin: 12px 12px 0;
+      background: rgba(23,23,31,0.88); backdrop-filter: blur(16px);
+      border: 1px solid var(--border2); border-radius: 10px;
+      padding: 6px 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    }
+    .annot-tool {
+      background: none; border: 1px solid transparent; color: var(--muted);
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 6px; border-radius: 7px; cursor: pointer; transition: all 0.13s;
+    }
+    .annot-tool .ico { width: 15px; height: 15px; }
+    .annot-tool:hover { color: var(--text); border-color: var(--border2); background: var(--s3); }
+    .annot-tool.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .annot-tool.right { margin-left: auto; }
+    .annot-tool-sep { width: 1px; height: 18px; background: var(--border2); flex-shrink: 0; margin: 0 2px; }
+    .annot-hint {
+      font-family: var(--mono); font-size: 10px; color: var(--muted);
+      padding: 6px 12px 0; min-height: 20px; line-height: 1.4; flex-shrink: 0;
+    }
+    .annot-canvas-wrap {
+      flex: 1; min-height: 0; overflow: auto; margin: 8px 12px 12px;
+      background: var(--s1); border-radius: 8px; border: 1px solid var(--border);
+    }
+    .annot-canvas { display: block; width: 100%; height: auto; }
+
+    /* Step editor panel */
+    .step-editor-panel {
+      grid-column: 2; grid-row: 1;
+      display: flex; flex-direction: column;
+      overflow: hidden; background: var(--s1);
+    }
+    .step-panel-header {
+      display: flex; align-items: center;
+      padding: 18px 20px 14px;
+      border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .step-num-wrap { flex: 1; display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+    .step-num {
+      font-family: var(--mono); font-size: 36px; font-weight: 700;
+      color: var(--accent); line-height: 1; letter-spacing: -1px;
+    }
+    .step-of { font-size: 12px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+    .step-nav { display: flex; gap: 4px; flex-shrink: 0; }
+    .nav-btn {
+      background: none; border: 1px solid var(--border2); color: var(--muted);
+      cursor: pointer; font-size: 18px; line-height: 1;
+      width: 32px; height: 32px; border-radius: 7px;
+      display: flex; align-items: center; justify-content: center; transition: all 0.13s;
+    }
+    .nav-btn:hover:not(:disabled) { color: var(--text); border-color: var(--accent); background: var(--accentd); }
+    .nav-btn:disabled { opacity: 0.25; cursor: default; }
+    .step-editor-body {
+      flex: 1; overflow-y: auto; padding: 16px 20px 20px;
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    .step-editor-body::-webkit-scrollbar { width: 4px; }
+    .step-editor-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 99px; }
+    .step-meta-row { display: flex; align-items: center; gap: 8px; }
+    .skip-toggle {
+      display: inline-flex; align-items: center; gap: 7px;
+      background: var(--accentd); border: 1px solid rgba(124,106,247,0.3); color: var(--text);
+      font-family: var(--font); font-size: 11px; font-weight: 600;
+      padding: 5px 10px 5px 5px; border-radius: 999px; cursor: pointer; transition: all 0.13s;
+    }
+    .skip-toggle:hover { border-color: var(--accent); background: rgba(124,106,247,0.2); }
+    .skip-toggle .switch-track {
+      width: 24px; height: 14px; border-radius: 999px; background: var(--accent);
+      position: relative; transition: background 0.15s; flex-shrink: 0;
+    }
+    .skip-toggle .switch-thumb {
+      position: absolute; top: 2px; left: 12px; width: 10px; height: 10px;
+      border-radius: 50%; background: #fff; transition: left 0.15s;
+    }
+    .skip-toggle.skipped { color: var(--muted); background: var(--s2); border-color: var(--border2); }
+    .skip-toggle.skipped .switch-track { background: var(--border2); }
+    .skip-toggle.skipped .switch-thumb { left: 2px; background: var(--muted); }
+    .step-ts-badge {
+      font-family: var(--mono); font-size: 10px; color: var(--muted);
+      background: var(--s2); border: 1px solid var(--border2);
+      border-radius: 5px; padding: 3px 8px; margin-left: auto; white-space: nowrap;
+    }
+    .step-overflow-wrap { position: relative; }
     .gen-row { display: flex; align-items: center; gap: 6px; }
     .gen-btn {
       display: flex; align-items: center; gap: 5px;
       background: var(--accentd); border: 1px solid var(--accent);
-      color: var(--text); border-radius: 7px; padding: 5px 10px;
+      color: var(--text); border-radius: 7px; padding: 7px 12px;
       font-family: var(--font); font-size: 11px; font-weight: 600;
       cursor: pointer; transition: all 0.15s; white-space: nowrap;
     }
@@ -312,32 +314,26 @@
     .gen-btn:disabled { opacity: 0.4; cursor: default; }
     .gen-btn:disabled:hover { background: var(--accentd); color: var(--text); }
     .gen-btn.secondary { background: none; border-color: var(--border2); color: var(--muted); }
-    .gen-btn.secondary:hover { background: var(--s3); color: var(--text); }
-
-    /* Media picker */
+    .gen-btn.secondary:hover { background: var(--s3); color: var(--text); border-color: var(--border2); }
+    .gen-btn .ico { width: 13px; height: 13px; }
     .media-picker {
-      display: flex; gap: 4px; padding: 3px;
+      display: flex; gap: 3px; padding: 3px;
       background: var(--s2); border: 1px solid var(--border2); border-radius: 9px;
     }
     .media-pill {
       flex: 1; display: flex; align-items: center; justify-content: center;
-      gap: 5px; padding: 5px 8px;
+      gap: 5px; padding: 6px 8px;
       background: none; border: none; border-radius: 6px;
       color: var(--muted); font-family: var(--font); font-size: 11px; font-weight: 600;
       cursor: pointer; transition: all 0.15s; white-space: nowrap;
     }
     .media-pill:hover { color: var(--text); background: var(--s3); }
-    .media-pill[aria-checked="true"] {
-      background: var(--accentd); color: var(--text);
-      box-shadow: inset 0 0 0 1px var(--accent);
-    }
+    .media-pill[aria-checked="true"] { background: var(--accentd); color: var(--text); box-shadow: inset 0 0 0 1px var(--accent); }
     .media-pill .ico { width: 12px; height: 12px; }
-
-    /* Fields */
     .field-group { position: relative; }
     .field-label {
       font-size: 10px; font-weight: 600; text-transform: uppercase;
-      letter-spacing: 0.1em; color: var(--muted); margin-bottom: 5px;
+      letter-spacing: 0.1em; color: var(--muted); margin-bottom: 6px;
       display: flex; align-items: center; justify-content: space-between;
     }
     .field-label .char-count { font-family: var(--mono); font-weight: 400; font-size: 10px; }
@@ -345,21 +341,20 @@
     .auto-ta {
       width: 100%; background: var(--s2); border: 1px solid var(--border2);
       border-radius: 8px; color: var(--text); font-family: var(--font);
-      font-size: 13px; padding: 9px 11px; outline: none; resize: none;
+      font-size: 13px; padding: 10px 12px; outline: none; resize: none;
       line-height: 1.6; transition: border-color 0.15s, box-shadow 0.15s;
-      overflow: hidden; min-height: 36px;
+      overflow: hidden; min-height: 38px;
     }
     .auto-ta:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,106,247,0.1); }
-
-    /* GIF trim panel */
+    .section-divider { height: 1px; background: var(--border); margin: 2px 0; }
     .gif-panel {
       background: var(--s2); border: 1px solid var(--border2);
-      border-radius: 8px; padding: 9px 11px;
-      display: flex; flex-direction: column; gap: 8px;
+      border-radius: 9px; padding: 10px 12px;
+      display: flex; flex-direction: column; gap: 9px;
     }
     .gif-panel[hidden] { display: none; }
     .gif-panel-title {
-      font-size: 10px; font-weight: 600; text-transform: uppercase;
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
       letter-spacing: 0.1em; color: var(--muted);
     }
     .gif-trim-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -382,116 +377,121 @@
     .gif-range-readout { flex: 1; text-align: center; font-family: var(--mono); font-size: 11px; color: var(--text); }
     .gif-trim-row .muted-label { font-size: 10px; }
     .gif-preview-img {
-      display: block; max-width: 100%; max-height: 180px; margin-top: 4px;
+      display: block; max-width: 100%; max-height: 160px; margin-top: 4px;
       border-radius: 6px; border: 1px solid var(--border2); background: var(--s3);
     }
     .gif-preview-img[hidden] { display: none; }
 
-    /* Export wrap (topbar) — menu drops DOWN */
-    .export-wrap { position: relative; }
-    .btn-export {
-      display: flex; align-items: center; gap: 5px;
-      background: var(--accent); color: #fff; border: none;
-      border-radius: 7px; padding: 6px 12px;
-      font-family: var(--font); font-size: 12px; font-weight: 700;
-      cursor: pointer; transition: filter 0.15s;
+    /* Filmstrip */
+    .filmstrip {
+      grid-column: 1 / -1; grid-row: 2;
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 16px;
+      background: var(--s1); border-top: 1px solid var(--border);
+      overflow-x: auto;
+      scrollbar-width: thin; scrollbar-color: var(--border2) transparent;
     }
-    .btn-export:hover { filter: brightness(1.1); }
-    .export-menu {
-      position: absolute; right: 0; top: calc(100% + 4px); z-index: 100;
-      background: var(--s2); border: 1px solid var(--border2);
-      border-radius: 10px; padding: 6px; min-width: 300px;
-      box-shadow: 0 12px 32px rgba(0,0,0,0.5); display: none;
+    .filmstrip::-webkit-scrollbar { height: 3px; }
+    .filmstrip::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 99px; }
+    .chip {
+      flex-shrink: 0; display: flex; flex-direction: column; align-items: stretch;
+      background: var(--s2); border: 2px solid var(--border2); color: var(--muted);
+      width: 96px; border-radius: 8px; overflow: hidden; cursor: pointer;
+      font-family: var(--mono); font-size: 10px; transition: all 0.15s; padding: 0;
     }
-    .export-menu.open { display: block; }
-    .export-row {
+    .chip:hover { color: var(--text); border-color: rgba(124,106,247,0.5); transform: translateY(-2px); }
+    .chip.active {
+      border-color: var(--accent); transform: translateY(-3px);
+      box-shadow: 0 4px 18px rgba(124,106,247,0.3);
+    }
+    .chip.active .chip-meta { background: var(--accentd); color: var(--text); }
+    .chip.excluded { opacity: 0.45; position: relative; }
+    .chip.excluded::after {
+      content: "skip"; position: absolute; top: 4px; left: 4px;
+      background: rgba(0,0,0,0.8); color: var(--muted);
+      font-family: var(--mono); font-size: 8px; font-weight: 700;
+      padding: 1px 5px; border-radius: 3px; letter-spacing: 0.06em; text-transform: uppercase;
+    }
+    .chip-thumb { width: 100%; height: 58px; object-fit: cover; background: var(--s3); display: block; }
+    .chip-meta {
       display: flex; align-items: center; justify-content: space-between;
-      padding: 8px 10px; border-radius: 7px; transition: background 0.1s; gap: 12px;
+      padding: 3px 6px; gap: 4px; background: var(--s2);
+      transition: background 0.13s, color 0.13s;
     }
-    .export-row-body strong { display: block; font-size: 12px; color: var(--text); }
-    .export-row-body span { font-size: 11px; color: var(--muted); }
-    .export-row-actions { display: flex; gap: 4px; flex-shrink: 0; }
-    .export-sep { height: 1px; background: var(--border); margin: 4px 6px; }
-    .export-summary { font-size: 11px; color: var(--muted); padding: 4px 10px 6px; }
-    .btn-row {
-      background: var(--s3); border: 1px solid var(--border2); color: var(--text);
-      border-radius: 5px; padding: 4px 10px;
-      font-family: var(--font); font-size: 11px; font-weight: 600;
-      cursor: pointer; transition: all 0.12s; white-space: nowrap;
+    .chip-num {
+      width: 16px; height: 16px; border-radius: 50%; background: var(--accentd);
+      color: var(--accent); font-size: 9px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
     }
-    .btn-row:hover { border-color: var(--accent); }
-    .btn-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-    .btn-row:disabled { opacity: 0.4; cursor: default; }
-    .btn-row-icon { padding: 4px 8px; }
+    .chip.active .chip-num { background: var(--accent); color: #fff; }
+    .chip-time { font-family: var(--mono); font-size: 9px; }
+    .chip-title {
+      padding: 3px 6px 5px;
+      font-family: var(--font); font-size: 10px; font-weight: 600;
+      color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      background: var(--s2); line-height: 1.3; transition: color 0.13s;
+    }
+    .chip.active .chip-title, .chip:hover .chip-title { color: var(--text); }
 
-    /* Spinner */
+    /* Spinner, toasts, modals */
     .spin {
       display: inline-block; width: 10px; height: 10px;
       border: 2px solid currentColor; border-top-color: transparent;
       border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: -1px;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
-
-    /* Keyboard shortcut table */
     .kbd-table { width: 100%; border-collapse: collapse; font-size: 12px; }
     .kbd-table td { padding: 5px 0; color: var(--muted); }
     .kbd-table td:first-child { color: var(--text); }
     .kbd-table td:last-child { text-align: right; white-space: nowrap; }
     .kbd {
       display: inline-block; background: var(--s3); border: 1px solid var(--border2);
-      border-radius: 4px; padding: 1px 6px; font-family: var(--mono); font-size: 11px;
-      color: var(--text);
+      border-radius: 4px; padding: 1px 6px; font-family: var(--mono); font-size: 11px; color: var(--text);
     }
-
-    /* Toast */
     .toast {
-      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(12px);
+      position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(12px);
       background: var(--s2); border: 1px solid var(--border2); color: var(--text);
-      border-radius: 8px; padding: 9px 16px; font-size: 12px;
-      box-shadow: 0 6px 20px rgba(0,0,0,0.4); z-index: 200;
+      border-radius: 9px; padding: 10px 18px; font-size: 12px; font-weight: 500;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.5); z-index: 200;
       opacity: 0; transition: opacity 0.2s, transform 0.2s; pointer-events: none;
       max-width: 420px; text-align: center;
     }
     .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-    .toast.error { background: rgba(248,113,113,0.1); border-color: rgba(248,113,113,0.35); color: var(--error); }
-
-    /* Modal */
+    .toast.error { background: rgba(248,113,113,0.12); border-color: rgba(248,113,113,0.4); color: var(--error); }
     .modal-backdrop {
-      position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 150;
-      display: none; align-items: center; justify-content: center;
-      backdrop-filter: blur(2px);
+      position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 150;
+      display: none; align-items: center; justify-content: center; backdrop-filter: blur(3px);
     }
     .modal-backdrop.open { display: flex; }
     .modal-card {
-      background: var(--s2); border: 1px solid var(--border2); border-radius: 12px;
-      padding: 20px; max-width: 380px; width: 90%; box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+      background: var(--s2); border: 1px solid var(--border2); border-radius: 14px;
+      padding: 22px; max-width: 400px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.6);
     }
     .modal-title { font-size: 15px; font-weight: 700; margin-bottom: 10px; }
-    .modal-body { font-size: 13px; color: var(--muted); line-height: 1.55; margin-bottom: 16px; }
+    .modal-body { font-size: 13px; color: var(--muted); line-height: 1.55; margin-bottom: 18px; }
     .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
     .modal-btn {
       background: var(--s3); border: 1px solid var(--border2); color: var(--text);
-      border-radius: 7px; padding: 7px 14px; font-family: var(--font); font-size: 12px;
+      border-radius: 7px; padding: 8px 16px; font-family: var(--font); font-size: 12px;
       font-weight: 600; cursor: pointer; transition: all 0.12s;
     }
     .modal-btn:hover { border-color: var(--accent); }
     .modal-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
     .modal-btn.danger  { background: rgba(248,113,113,0.1); border-color: var(--error); color: var(--error); }
     .modal-btn.danger:hover { background: var(--error); color: #fff; }
-
-    /* Hidden extractor elements */
     .hidden-extractor { position: absolute; left: -9999px; top: -9999px; width: 1px; height: 1px; pointer-events: none; }
   </style>
 </head>
 <body>
 
-<!-- ── Topbar ── -->
+<!-- Topbar -->
 <div class="topbar">
   <span class="logo">Guidr<em>.</em></span>
+  <div class="topbar-divider"></div>
   <input class="topbar-name" id="sessionName" type="text" placeholder="Guide name" autocomplete="off" spellcheck="false"/>
   <div class="topbar-right">
     <div class="overflow-wrap" id="sessionMoreWrap">
-      <button class="overflow-btn iBtn-icon" id="sessionMoreBtn" type="button" aria-label="Guide actions" title="Guide actions">···</button>
+      <button class="overflow-btn" id="sessionMoreBtn" type="button" aria-label="Guide actions" title="Guide actions">···</button>
       <div class="overflow-menu" id="sessionMoreMenu">
         <div class="menu-item" id="sessDropVidItem">
           <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 16 2 2 4-4"/><path d="m22 10.5V6l-4 4"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>
@@ -502,137 +502,157 @@
           Remove narration (keep text)
         </div>
         <div class="sep" id="sessSep"></div>
+        <div class="menu-item" id="sessSettingsItem">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          Settings
+        </div>
+        <div class="menu-item" id="helpMenuItem">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          Keyboard shortcuts
+        </div>
+        <div class="sep"></div>
         <div class="menu-item danger" id="sessDeleteItem">
           <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
           Delete guide
         </div>
       </div>
     </div>
-    <button class="iBtn" id="helpBtn" type="button" aria-label="Keyboard shortcuts" title="Keyboard shortcuts">?</button>
-    <button class="iBtn" id="btn-options" type="button">Settings</button>
     <div class="export-wrap">
       <button class="btn-export" id="exportBtn" type="button" aria-haspopup="menu" aria-expanded="false">
         Export
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;"><polyline points="6 9 12 15 18 9"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
       <div class="export-menu" id="exportMenu" role="menu">
         <div class="export-summary" id="exportSummary"></div>
         <div class="export-row" data-fmt="markdown">
-          <div class="export-row-body">
-            <strong>Markdown</strong>
-            <span>For Notion, GitHub, Linear, docs.</span>
-          </div>
+          <div class="export-row-body"><strong>Markdown</strong><span>Notion, GitHub, Linear, docs.</span></div>
           <div class="export-row-actions">
-            <button class="btn-row" data-action="copy" title="Copy to clipboard">Copy</button>
-            <button class="btn-row btn-row-icon" data-action="download" title="Download as .md" aria-label="Download Markdown"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+            <button class="btn-row" data-action="copy">Copy</button>
+            <button class="btn-row btn-row-icon" data-action="download" aria-label="Download Markdown"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
           </div>
         </div>
         <div class="export-row" data-fmt="html">
-          <div class="export-row-body">
-            <strong>HTML page</strong>
-            <span>Self-contained, share as a file.</span>
-          </div>
+          <div class="export-row-body"><strong>HTML page</strong><span>Self-contained, share as a file.</span></div>
           <div class="export-row-actions">
-            <button class="btn-row" data-action="copy" title="Copy to clipboard">Copy</button>
-            <button class="btn-row btn-row-icon" data-action="download" title="Download as .html" aria-label="Download HTML"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+            <button class="btn-row" data-action="copy">Copy</button>
+            <button class="btn-row btn-row-icon" data-action="download" aria-label="Download HTML"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
           </div>
         </div>
         <div class="export-row" data-fmt="intercom">
-          <div class="export-row-body">
-            <strong>Intercom HTML</strong>
-            <span>Paste straight into the article editor.</span>
-          </div>
+          <div class="export-row-body"><strong>Intercom HTML</strong><span>Paste into the article editor.</span></div>
           <div class="export-row-actions">
-            <button class="btn-row" data-action="copy" title="Copy to clipboard">Copy</button>
-            <button class="btn-row btn-row-icon" data-action="download" title="Download as .html" aria-label="Download Intercom HTML"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+            <button class="btn-row" data-action="copy">Copy</button>
+            <button class="btn-row btn-row-icon" data-action="download" aria-label="Download Intercom HTML"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
           </div>
         </div>
         <div class="export-sep"></div>
         <div class="export-row" data-fmt="video">
-          <div class="export-row-body">
-            <strong>Video</strong>
-            <span>Original screen recording (.webm).</span>
-          </div>
-          <div class="export-row-actions">
-            <button class="btn-row" data-action="download">Download</button>
-          </div>
+          <div class="export-row-body"><strong>Video</strong><span>Original recording (.webm).</span></div>
+          <div class="export-row-actions"><button class="btn-row" data-action="download">Download</button></div>
         </div>
         <div class="export-row" data-fmt="json">
-          <div class="export-row-body">
-            <strong>Raw JSON</strong>
-            <span>Backup / import to another tool.</span>
-          </div>
-          <div class="export-row-actions">
-            <button class="btn-row" data-action="download">Download</button>
-          </div>
+          <div class="export-row-body"><strong>Raw JSON</strong><span>Backup / import elsewhere.</span></div>
+          <div class="export-row-actions"><button class="btn-row" data-action="download">Download</button></div>
         </div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- ── Three-column editor layout ── -->
+<!-- Main editor grid -->
 <div class="editor-layout">
 
-  <!-- Left: step list -->
-  <div class="step-list-panel">
-    <div class="step-list-header" id="stepListHeader">Steps</div>
-    <div id="stepList"></div>
-  </div>
-
-  <!-- Center: video + chapter rail + annotation overlay -->
-  <div class="video-center">
-    <div class="video-pane" id="videoPane">
-      <video id="srcVideo" controls preload="auto" controlsList="nodownload" style="display:none"></video>
-      <div class="narration-vol" id="narrationVol" hidden>
-        <button class="nv-btn" id="narrationMute" type="button" aria-label="Mute narration" title="Mute narration">
-          <svg class="ico nv-ico-on"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
-          <svg class="ico nv-ico-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
-        </button>
-        <input type="range" id="narrationVolume" min="0" max="1" step="0.01" value="1" aria-label="Narration volume"/>
+  <!-- Frame view (left, row 1) -->
+  <div class="frame-view" id="frameView">
+    <div class="frame-empty" id="frameEmpty">
+      <div class="fe-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="m21 17-5-5-9 9"/></svg>
       </div>
+      <span>Loading frame…</span>
     </div>
-
-    <div class="chapter-rail" id="chapterRail"></div>
-
-    <!-- Annotation pane — overlays the entire center column when active -->
+    <img class="frame-img" id="frameImg" alt=""/>
+    <video id="srcVideo" preload="auto" controls controlsList="nodownload"></video>
+    <div class="narration-vol" id="narrationVol" hidden>
+      <button class="nv-btn" id="narrationMute" type="button" aria-label="Mute narration" title="Mute narration">
+        <svg class="ico nv-ico-on"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+        <svg class="ico nv-ico-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+      </button>
+      <input type="range" id="narrationVolume" min="0" max="1" step="0.01" value="1" aria-label="Narration volume"/>
+    </div>
+    <!-- Annotation pane (overlays frame-view when active) -->
     <div class="annot-pane" id="annotPane">
       <div class="annot-toolbar">
         <button class="annot-tool" data-tool="circle" data-hint="Numbered callout · 1" title="Numbered callout (1)" aria-label="Numbered callout"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/></svg></button>
-        <button class="annot-tool" data-tool="arrow"  data-hint="Arrow · 2 · drag from→to" title="Arrow (2) — drag from→to" aria-label="Arrow"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="18" x2="18" y2="6"/><polyline points="9 6 18 6 18 15"/></svg></button>
+        <button class="annot-tool" data-tool="arrow" data-hint="Arrow · 2 · drag from→to" title="Arrow (2) — drag from→to" aria-label="Arrow"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="18" x2="18" y2="6"/><polyline points="9 6 18 6 18 15"/></svg></button>
         <button class="annot-tool" data-tool="highlight" data-hint="Highlight box · 3 · drag" title="Highlight box (3) — drag" aria-label="Highlight box"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="16" x="4" y="4" rx="1"/></svg></button>
         <button class="annot-tool" data-tool="mask" data-hint="Mask sensitive area · 4 · drag" title="Mask sensitive area (4) — drag" aria-label="Mask"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3 2"><rect width="16" height="16" x="4" y="4" rx="1"/></svg></button>
-        <button class="annot-tool" id="annotUndo"  data-hint="Undo last annotation"  title="Undo last" aria-label="Undo"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></svg></button>
+        <div class="annot-tool-sep"></div>
+        <button class="annot-tool" id="annotUndo" data-hint="Undo last annotation" title="Undo last" aria-label="Undo"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></svg></button>
         <button class="annot-tool" id="annotClear" data-hint="Clear all annotations" title="Clear all" aria-label="Clear all"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
         <button class="annot-tool right" id="annotClose" data-hint="Close annotations" title="Close annotations" aria-label="Close"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
       <div class="annot-hint" id="annotHint">&nbsp;</div>
-      <div class="annot-canvas-wrap">
-        <canvas class="annot-canvas" id="annotCanvas" width="800" height="450"></canvas>
-      </div>
+      <div class="annot-canvas-wrap"><canvas class="annot-canvas" id="annotCanvas" width="800" height="450"></canvas></div>
     </div>
   </div>
 
-  <!-- Right: step editor -->
+  <!-- Step editor panel (right column, row 1) -->
   <div class="step-editor-panel">
+    <div class="step-panel-header">
+      <div class="step-num-wrap">
+        <span class="step-num" id="stepNum">01</span>
+        <span class="step-of" id="stepOf">of 1</span>
+      </div>
+      <div class="step-nav">
+        <button class="nav-btn" id="prevBtn" title="Previous step (←)" aria-label="Previous step">‹</button>
+        <button class="nav-btn" id="nextBtn" title="Next step (→)" aria-label="Next step">›</button>
+      </div>
+    </div>
     <div class="step-editor-body">
-
-      <div class="step-controls">
+      <div class="step-meta-row">
         <button class="skip-toggle" id="stepSkipToggle" type="button" role="switch" aria-checked="true" aria-label="Include this step in the guide">
           <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
-          <span>Include in guide</span>
+          <span>Include</span>
         </button>
-        <span class="ts-readout" id="stepTs">0:00.0</span>
-        <div class="overflow-wrap">
-          <button class="overflow-btn" id="stepMoreBtn" type="button" aria-label="More actions"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></button>
+        <span class="step-ts-badge" id="stepTs">0:00.0</span>
+        <div class="step-overflow-wrap overflow-wrap">
+          <button class="overflow-btn" id="stepMoreBtn" type="button" aria-label="More actions" style="font-size:14px;padding:5px 9px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
+          </button>
           <div class="overflow-menu" id="stepMoreMenu">
-            <div class="menu-item" id="enrichAllBtn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Enrich all steps with AI</div>
+            <div class="menu-item" id="enrichAllBtn">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3m0 12v3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1M3 12h3m12 0h3M5.6 18.4l2.1-2.1m8.6-8.6 2.1-2.1"/></svg>
+              Enrich all steps with AI
+            </div>
             <div class="sep"></div>
-            <div class="menu-item danger" id="deleteStepBtn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Delete step</div>
+            <div class="menu-item danger" id="deleteStepBtn">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              Delete step
+            </div>
           </div>
         </div>
       </div>
-
+      <div class="gen-row">
+        <button class="gen-btn" id="enrichOneBtn">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3m0 12v3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1M3 12h3m12 0h3M5.6 18.4l2.1-2.1m8.6-8.6 2.1-2.1"/></svg>
+          Enrich with AI
+        </button>
+        <button class="gen-btn secondary" id="openAnnotBtn">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          Annotate
+        </button>
+      </div>
+      <div class="section-divider"></div>
+      <div class="field-group">
+        <div class="field-label">Title<span class="char-count" id="titleCount">0 / 60</span></div>
+        <textarea class="auto-ta" id="stepTitle" placeholder="What is the user doing in this step?" rows="1" maxlength="60"></textarea>
+      </div>
+      <div class="field-group">
+        <div class="field-label">Description<span class="char-count" id="bodyCount">0 / 200</span></div>
+        <textarea class="auto-ta" id="stepBody" placeholder="One or two sentences. What to click and what happens next." rows="3" maxlength="200"></textarea>
+      </div>
+      <div class="section-divider"></div>
+      <div class="field-label" style="margin-bottom:8px;">Media</div>
       <div class="media-picker" id="stepMedia" role="radiogroup" aria-label="Step media">
         <button class="media-pill" type="button" role="radio" data-mode="screenshot" aria-checked="true">
           <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="m21 17-5-5-9 9"/></svg>
@@ -640,79 +660,47 @@
         </button>
         <button class="media-pill" type="button" role="radio" data-mode="gif" aria-checked="false">
           <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z" fill="currentColor"/></svg>
-          GIF
+          GIF clip
         </button>
         <button class="media-pill" type="button" role="radio" data-mode="none" aria-checked="false">
           <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="5" y1="5" x2="19" y2="19"/></svg>
           No image
         </button>
       </div>
-
-      <div class="gen-row">
-        <button class="gen-btn" id="enrichOneBtn">
-          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3m0 12v3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1M3 12h3m12 0h3M5.6 18.4l2.1-2.1m8.6-8.6 2.1-2.1"/></svg>
-          Enrich with AI
-        </button>
-        <button class="gen-btn" id="openAnnotBtn">
-          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-          Annotate screenshot
-        </button>
-      </div>
-
       <div class="gif-panel" id="gifPanel" hidden>
         <div class="gif-panel-title">GIF clip range</div>
         <div class="gif-playhead-row">
-          <button class="gen-btn secondary" id="gifSetStartBtn" type="button" title="Use video's current time as clip start">
+          <button class="gen-btn secondary" id="gifSetStartBtn" type="button">
             <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="4" x2="5" y2="20"/><polygon points="10 5 19 12 10 19" fill="currentColor"/></svg>
             Start here
           </button>
           <span class="gif-range-readout" id="gifRangeReadout">0.0s → 0.0s · 0.0s clip</span>
-          <button class="gen-btn secondary" id="gifSetEndBtn" type="button" title="Use video's current time as clip end">
+          <button class="gen-btn secondary" id="gifSetEndBtn" type="button">
             <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 5 14 12 5 19" fill="currentColor"/><line x1="19" y1="4" x2="19" y2="20"/></svg>
             End here
           </button>
         </div>
         <div class="gif-trim-row">
-          <label class="muted-label">Fine-tune start<input type="number" id="gifStart" step="0.1" min="0" value="0"/></label>
-          <label class="muted-label">Fine-tune end<input type="number" id="gifEnd" step="0.1" min="0" value="0"/></label>
-          <label class="muted-label">FPS
-            <select id="gifFps">
-              <option value="5">5</option>
-              <option value="10" selected>10</option>
-              <option value="15">15</option>
-            </select>
-          </label>
+          <label class="muted-label">Start (s)<input type="number" id="gifStart" step="0.1" min="0" value="0"/></label>
+          <label class="muted-label">End (s)<input type="number" id="gifEnd" step="0.1" min="0" value="0"/></label>
+          <label class="muted-label">FPS<select id="gifFps"><option value="5">5</option><option value="10" selected>10</option><option value="15">15</option></select></label>
         </div>
         <div class="gif-actions-row">
-          <button class="gen-btn secondary" id="gifPreviewBtn" type="button">Preview clip</button>
+          <button class="gen-btn secondary" id="gifPreviewBtn" type="button">Preview</button>
           <button class="gen-btn" id="gifGenerateBtn" type="button">Generate GIF</button>
           <span class="gif-status" id="gifStatus">Not generated yet</span>
         </div>
         <img class="gif-preview-img" id="gifPreviewImg" alt="" hidden/>
       </div>
-
-      <div class="field-group">
-        <div class="field-label">Title<span class="char-count" id="titleCount">0 / 60</span></div>
-        <textarea class="auto-ta" id="stepTitle" placeholder="What is the user doing in this step?" rows="1" maxlength="60"></textarea>
-      </div>
-
-      <div class="field-group">
-        <div class="field-label">Description<span class="char-count" id="bodyCount">0 / 200</span></div>
-        <textarea class="auto-ta" id="stepBody" placeholder="One or two sentences. What to click and what happens next." rows="3" maxlength="200"></textarea>
-      </div>
-
-    </div>
-
-    <div class="step-nav-footer">
-      <button class="nav-btn" id="prevBtn" title="Previous step (←)">← Prev</button>
-      <span class="step-counter" id="stepCounter">1 / 1</span>
-      <button class="nav-btn" id="nextBtn" title="Next step (→)">Next →</button>
     </div>
   </div>
 
+  <!-- Filmstrip (row 2, full width) -->
+  <div class="filmstrip" id="filmstrip"></div>
+
 </div>
 
-<!-- Hidden video/canvas for frame extraction -->
+<!-- Hidden extraction elements -->
 <video id="extractor" class="hidden-extractor" preload="auto" muted></video>
 <canvas id="extractorCanvas" class="hidden-extractor"></canvas>
 <audio id="narrationAudio" preload="metadata" hidden></audio>
@@ -721,7 +709,7 @@
 
 <!-- Keyboard shortcuts modal -->
 <div class="modal-backdrop" id="helpBackdrop" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
-  <div class="modal-card" style="max-width:360px">
+  <div class="modal-card" style="max-width:380px">
     <div class="modal-title" id="helpTitle">Keyboard shortcuts</div>
     <div class="modal-body" style="margin-bottom:14px">
       <table class="kbd-table">
@@ -732,9 +720,7 @@
         <tr><td>Show this sheet</td><td><span class="kbd">?</span></td></tr>
       </table>
     </div>
-    <div class="modal-actions">
-      <button class="modal-btn primary" id="helpClose" type="button">Close</button>
-    </div>
+    <div class="modal-actions"><button class="modal-btn primary" id="helpClose" type="button">Close</button></div>
   </div>
 </div>
 
@@ -750,7 +736,6 @@
   </div>
 </div>
 
-<!-- gif.js IIFE must load before the ES module so window.GIF is available -->
 <script src="../vendor/gif.js"></script>
 <script type="module" src="main.js"></script>
 </body>
