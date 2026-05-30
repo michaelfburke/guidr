@@ -168,7 +168,6 @@ function exportIntercom(session) {
     filename: `${slugify(session.name)}-intercom.html`,
     mimeType: "text/html",
     content: parts.join("\n"),
-    clipboard: true,
   };
 }
 

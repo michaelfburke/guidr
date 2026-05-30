@@ -815,40 +815,10 @@ sessionMoreMenu?.querySelector('[data-act="delete"]')?.addEventListener("click",
 });
 
 // ── Open session in editor ─────────────────────────────────────────────────
-async function openSession(sessionId) {
-  console.log("[Guidr] openSession", sessionId);
-  let res;
-  try {
-    res = await sw({ type: "SP_GET_SESSION", sessionId });
-  } catch (err) {
-    console.error("[Guidr] SP_GET_SESSION failed:", err);
-    return errorToast("Could not open guide: " + err.message);
-  }
-  if (!res?.ok) {
-    console.warn("[Guidr] SP_GET_SESSION returned not-ok:", res);
-    return errorToast("Could not open guide");
-  }
-
-  currentSessionId = sessionId;
-  currentSession = res.session;
-  steps = (res.session.steps || []).map(normalizeStep);
-  sessionName.value = res.session.name;
-  currentStepIdx = 0;
-
-  // Show the editor immediately — recording load is best-effort and must
-  // never block the UI. If the video blob fails to load (broken webm
-  // duration, missing recording, etc.) the editor still shows the steps
-  // and text and stays usable.
-  showView("v-editor");
-  renderChapterRail();
-  loadStepIntoEditor(0);
-
-  thumbCache.clear();
-  loadRecordingIntoPlayers(sessionId)
-    .then(() => populateRailThumbnails())
-    .catch((err) => console.error("[Guidr] loadRecordingIntoPlayers failed:", err));
-  loadNarrationIntoPlayer(sessionId)
-    .catch((err) => console.error("[Guidr] loadNarrationIntoPlayer failed:", err));
+function openSession(sessionId) {
+  chrome.tabs.create({
+    url: chrome.runtime.getURL("editor/index.html") + "?session=" + encodeURIComponent(sessionId),
+  });
 }
 
 function normalizeStep(s) {
