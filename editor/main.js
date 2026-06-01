@@ -21,6 +21,8 @@ let currentBrand = null;
 let currentFrameUrl = null;
 let annotator = null;
 let activeTool = null;
+let hasVoice = false;   // true once a narration track is loaded for this guide
+let watching = false;   // true while the full recording is playing over the frame
 
 const GIF_MAX_WIDTH = 1280;
 const GIF_SIZE_WARN_BYTES = 3 * 1024 * 1024;
@@ -69,6 +71,10 @@ const gifPreviewImg   = $("gifPreviewImg");
 const annotPane       = $("annotPane");
 const annotCanvas     = $("annotCanvas");
 const annotHint       = $("annotHint");
+const watchBtn        = $("watchBtn");
+const watchBtnLabel   = $("watchBtnLabel");
+const enrichAllTopBtn = $("enrichAllTopBtn");
+const enrichAllTopLabel = $("enrichAllTopLabel");
 const mediaPills      = document.querySelectorAll(".media-pill[data-mode]");
 const helpBackdrop    = $("helpBackdrop");
 const modalBackdrop   = $("modalBackdrop");
@@ -137,12 +143,15 @@ async function loadRecordingIntoPlayers(sid) {
   if (!rec?.blob) {
     srcVideo.removeAttribute("src");
     extractor.removeAttribute("src");
+    frameView.classList.remove("has-video");
     return;
   }
   recordingObjectUrl = URL.createObjectURL(rec.blob);
   extractorObjectUrl = URL.createObjectURL(rec.blob);
   srcVideo.src = recordingObjectUrl;
   extractor.src = extractorObjectUrl;
+  // A recording is available — reveal the "Watch recording" control.
+  frameView.classList.add("has-video");
 
   await Promise.race([
     new Promise((resolve) => {
@@ -186,6 +195,7 @@ function renderFilmstrip() {
   // scroll active chip into view
   const active = filmstrip.querySelector(".chip.active");
   if (active) active.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+  updateEnrichAllTopBtn();
 }
 
 makeReorderable(filmstrip, {
@@ -229,12 +239,18 @@ function setFrameImg(src) {
   }
 }
 
+function setFrameEmptyMessage(text) {
+  const span = frameEmpty.querySelector("span");
+  if (span) span.textContent = text;
+}
+
 // ── Step editor ───────────────────────────────────────────────────────────
 function loadStepIntoEditor(idx) {
   const step = steps[idx];
   if (!step) return;
   currentStepIdx = idx;
 
+  if (watching) exitWatchMode();
   if (srcVideo.src) {
     try { srcVideo.currentTime = Math.max(0, step.tsMs / 1000); } catch {}
   }
@@ -252,17 +268,31 @@ function loadStepIntoEditor(idx) {
   stepNum.textContent = String(idx + 1).padStart(2, "0");
   stepOf.textContent  = `of ${steps.length}`;
 
-  // show GIF video source or extracted frame
-  const isGif = step.mediaMode === "gif";
-  srcVideo.classList.toggle("gif-mode", isGif);
-  if (isGif) {
+  loadStepMedia(step);
+  updateVideoSurface();
+
+  renderFilmstrip();
+}
+
+// Fills the frame view based on the step's media mode: GIF clip, extracted
+// screenshot, or an explicit "no image" placeholder.
+function loadStepMedia(step) {
+  const mode = step.mediaMode || "screenshot";
+  srcVideo.classList.toggle("gif-mode", mode === "gif");
+  if (mode === "gif") {
     frameEmpty.style.display = "none";
+  } else if (mode === "none") {
+    // "No image" — don't leave the screenshot on screen; show a clear
+    // placeholder so the toggle's effect is obvious.
+    setFrameImg(null);
+    setFrameEmptyMessage("No image — this step will be text-only in the guide.");
   } else {
     const cached = thumbCache.get(step.id);
     if (cached) {
       setFrameImg(cached);
     } else if (extractor.src) {
       frameImg.classList.add("loading");
+      setFrameEmptyMessage("Loading frame…");
       frameEmpty.style.display = "";
       extractFrame(step.tsMs)
         .then(dataUrl => {
@@ -276,8 +306,6 @@ function loadStepIntoEditor(idx) {
       setFrameImg(null);
     }
   }
-
-  renderFilmstrip();
 }
 
 function loadStepFields(step) {
@@ -333,6 +361,11 @@ mediaPills.forEach(p => {
     setActiveMediaPill(mode);
     refreshGifPanel(step);
     updateAnnotateButtonState(step);
+    // Reflect the new media choice in the frame view immediately (e.g. clear
+    // the screenshot when switching to "No image").
+    if (watching) exitWatchMode();
+    loadStepMedia(step);
+    updateVideoSurface();
     saveCurrentStep();
   });
 });
@@ -595,12 +628,14 @@ $("enrichOneBtn").addEventListener("click", async () => {
 });
 
 let enrichAllRunning = false;
-$("enrichAllBtn").addEventListener("click", async () => {
+async function runEnrichAll() {
   if (enrichAllRunning) return;
   stepMoreMenu.classList.remove("open");
   const pending = steps.filter(s => !s.enriched);
   if (!pending.length) { toast("All steps are already enriched"); return; }
   enrichAllRunning = true;
+  enrichAllTopBtn.setAttribute("aria-busy", "true");
+  updateEnrichAllTopBtn();
   toast(`Enriching ${pending.length} step${pending.length === 1 ? "" : "s"}…`, 4000);
   let failed = null;
   for (const step of pending) {
@@ -611,15 +646,35 @@ $("enrichAllBtn").addEventListener("click", async () => {
     else if (!failed) failed = res?.error;
   }
   enrichAllRunning = false;
+  enrichAllTopBtn.removeAttribute("aria-busy");
+  updateEnrichAllTopBtn();
   if (failed) errorToast(formatApiError(failed));
   else toast("All steps enriched");
-});
+}
+$("enrichAllBtn").addEventListener("click", runEnrichAll);
+enrichAllTopBtn.addEventListener("click", runEnrichAll);
+
+// Surfaces the guide-level "Enrich all" action in the topbar whenever there
+// are steps still missing AI text, with a live count — so it isn't buried in
+// the per-step overflow menu.
+function updateEnrichAllTopBtn() {
+  const unenriched = steps.filter(s => !s.enriched).length;
+  if (!unenriched || enrichAllRunning) {
+    enrichAllTopBtn.hidden = true;
+    return;
+  }
+  enrichAllTopBtn.hidden = false;
+  enrichAllTopLabel.textContent = unenriched === steps.length
+    ? "Enrich all"
+    : `Enrich ${unenriched}`;
+}
 
 function onStepEnriched(step) {
   const i = steps.findIndex(s => s.id === step.id);
   if (i !== -1) steps[i] = step;
   if (steps[currentStepIdx]?.id === step.id) loadStepFields(step);
   renderFilmstrip();
+  updateEnrichAllTopBtn();
 }
 
 chrome.runtime.onMessage.addListener((msg) => {
@@ -651,6 +706,10 @@ openAnnotBtn.addEventListener("click", () => {
   openAnnotPaneForCurrentStep();
 });
 $("annotClose").addEventListener("click", closeAnnotPane);
+// Jump straight to the Branding settings where annotation colors are defined.
+$("annotBrandBtn").addEventListener("click", () => {
+  chrome.tabs.create({ url: chrome.runtime.getURL("options/index.html#branding") });
+});
 $("annotUndo").addEventListener("click", () => {
   const step = steps[currentStepIdx];
   if (!step?.annotations?.length) return;
@@ -974,8 +1033,18 @@ async function loadNarrationIntoPlayer(sid) {
 }
 
 function setNarrationOverlayVisible(visible) {
+  hasVoice = !!visible;
   narrationVol.hidden = !visible;
-  frameView.classList.toggle("has-voice", !!visible);
+  frameView.classList.toggle("has-voice", hasVoice);
+  updateVideoSurface();
+}
+
+// The narration volume control only belongs on screen while the recording is
+// actually visible — watch mode or a GIF step — never over a static screenshot.
+function updateVideoSurface() {
+  const step = steps[currentStepIdx];
+  const showingVideo = watching || step?.mediaMode === "gif";
+  frameView.classList.toggle("show-video", showingVideo);
 }
 
 async function applyStoredNarrationVolume() {
@@ -1004,6 +1073,36 @@ narrationMute.addEventListener("click", () => {
   narrationMute.setAttribute("aria-label", next ? "Unmute narration" : "Mute narration");
   narrationMute.setAttribute("title",      next ? "Unmute narration" : "Mute narration");
   chrome.storage.local.set({ narrationMuted: next });
+});
+
+// ── Watch recording ───────────────────────────────────────────────────────
+// Lets the user play back the full screen recording before exporting. The
+// video overlays the frame view; narration (if any) syncs via bindNarrationSync.
+function enterWatchMode() {
+  if (!srcVideo.src) { errorToast("No recording loaded for this guide"); return; }
+  watching = true;
+  if (annotPane.classList.contains("active")) closeAnnotPane();
+  srcVideo.classList.add("watch-mode");
+  watchBtn.querySelector(".nv-ico-on").style.display = "none";
+  watchBtn.querySelector(".nv-ico-off").style.display = "";
+  watchBtnLabel.textContent = "Close";
+  updateVideoSurface();
+  srcVideo.play().catch(() => {});
+}
+
+function exitWatchMode() {
+  watching = false;
+  srcVideo.classList.remove("watch-mode");
+  try { srcVideo.pause(); } catch {}
+  watchBtn.querySelector(".nv-ico-on").style.display = "";
+  watchBtn.querySelector(".nv-ico-off").style.display = "none";
+  watchBtnLabel.textContent = "Watch recording";
+  updateVideoSurface();
+}
+
+watchBtn.addEventListener("click", () => {
+  if (watching) exitWatchMode();
+  else enterWatchMode();
 });
 
 // ── Export ────────────────────────────────────────────────────────────────

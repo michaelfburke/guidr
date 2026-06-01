@@ -92,14 +92,39 @@ function applyState() {
 }
 
 // ── Navigation ─────────────────────────────────────────────────────────────
+function showSection(name) {
+  const link = document.querySelector(`nav a[data-section="${name}"]`);
+  const section = document.getElementById(`section-${name}`);
+  if (!link || !section) return;
+  document.querySelectorAll("nav a").forEach((a) => a.classList.remove("active"));
+  document.querySelectorAll("section").forEach((s) => s.classList.remove("active"));
+  link.classList.add("active");
+  section.classList.add("active");
+}
+
 document.querySelectorAll("nav a[data-section]").forEach((link) => {
   link.addEventListener("click", (e) => {
     e.preventDefault();
-    document.querySelectorAll("nav a").forEach((a) => a.classList.remove("active"));
-    document.querySelectorAll("section").forEach((s) => s.classList.remove("active"));
-    link.classList.add("active");
-    document.getElementById(`section-${link.dataset.section}`).classList.add("active");
+    showSection(link.dataset.section);
   });
+});
+
+// Deep link: editor's "Brand colors" shortcut opens options/index.html#branding.
+if (location.hash) {
+  const target = location.hash.replace(/^#/, "");
+  if (document.getElementById(`section-${target}`)) showSection(target);
+}
+
+// "Back to guides" — reopens the Guidr side panel (where the guide list lives).
+// Must run in response to a user gesture, which a click satisfies.
+document.getElementById("backToGuides")?.addEventListener("click", async (e) => {
+  e.preventDefault();
+  try {
+    const win = await chrome.windows.getCurrent();
+    await chrome.sidePanel.open({ windowId: win.id });
+  } catch (err) {
+    console.warn("[Guidr] Could not open side panel:", err);
+  }
 });
 
 // ── Provider cards ─────────────────────────────────────────────────────────
