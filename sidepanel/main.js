@@ -139,7 +139,22 @@ chrome.storage.onChanged.addListener((changes, area) => {
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === "SW_STEP_CAPTURED") onStepCaptured(msg.payload.step);
   if (msg.type === "SW_STEP_ENRICHED") onStepEnriched(msg.payload.step);
+  if (msg.type === "SW_MARKERS_STATUS") setMarkersWarning(!msg.active);
 });
+
+function setMarkersWarning(show) {
+  const el = $("coachLine");
+  if (!el) return;
+  if (show) {
+    el.textContent = "⚠︎ Step capture is blocked on this page. Your video is still recording — switch to your product tab to capture clicks.";
+    el.style.display = "";
+    el.classList.add("warn");
+  } else {
+    el.textContent = "Walk through your product. Each click captures a step. Stop when you’re done.";
+    el.style.display = "";
+    el.classList.remove("warn");
+  }
+}
 
 // ── Navigation ─────────────────────────────────────────────────────────────
 $("btn-home").addEventListener("click", () => showView("v-home"));
@@ -282,6 +297,10 @@ recBtn.addEventListener("click", async () => {
       return;
     }
 
+    // If the starting page blocks content-script injection, warn the user
+    // immediately so they know to navigate to their product before clicking.
+    if (res.markersActive === false) setMarkersWarning(true);
+
     recBtn.classList.add("getready");
     recLabel.textContent = "Get ready…";
     await new Promise((r) => setTimeout(r, STARTUP_COUNTDOWN_MS));
@@ -324,9 +343,17 @@ recBtn.addEventListener("click", async () => {
     $("sessionsSection").style.display = "none";
 
     const { seenFirstRecording } = await chrome.storage.local.get("seenFirstRecording");
-    $("coachLine").style.display = seenFirstRecording ? "none" : "";
-    if (!seenFirstRecording) {
+    const coachEl = $("coachLine");
+    // If markers are already blocked, setMarkersWarning already set the warn
+    // variant. Otherwise show the normal coach hint on first use.
+    if (res.markersActive === false) {
+      coachEl.style.display = "";
+    } else if (!seenFirstRecording) {
+      coachEl.style.display = "";
+      coachEl.textContent = "Walk through your product. Each click captures a step. Stop when you're done.";
       chrome.storage.local.set({ seenFirstRecording: true });
+    } else {
+      coachEl.style.display = "none";
     }
 
     // Green "go" burst announcing recording is live, then settle into the
@@ -369,7 +396,11 @@ async function finalizeRecording() {
     }
   } catch (err) {
     console.error("[Guidr] saveRecording failed:", err);
-    errorToast("Could not save recording: " + err.message);
+    if (err.name === "QuotaExceededError") {
+      errorToast("Storage is full — delete old guides or their video tracks to free space, then re-record.", 8000);
+    } else {
+      errorToast("Could not save recording: " + err.message);
+    }
   }
 
   // Stop the offscreen mic recorder. The offscreen doc writes the blob to
@@ -389,9 +420,19 @@ async function finalizeRecording() {
   setRecording(false);
   captureSection.style.display = "none";
   $("sessionsSection").style.display = "";
-  toast("Recording stopped");
   loadSessions();
-  if (steps.length) setTimeout(() => openSession(sessionId), 300);
+  if (steps.length) {
+    toast("Recording stopped");
+    setTimeout(() => openSession(sessionId), 300);
+  } else {
+    // No chapter markers were captured. The video is saved, but the user
+    // should know so they can re-record on an interactive page or add steps
+    // manually in the editor.
+    errorToast(
+      "Recording saved, but no steps were captured. Open the guide to add steps manually, or re-record on your product page.",
+      8000
+    );
+  }
 }
 
 function pickMimeType() {
