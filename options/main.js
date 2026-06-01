@@ -107,7 +107,7 @@ document.querySelectorAll(".provider-card").forEach((card) => {
   card.addEventListener("click", () => setProvider(card.dataset.provider, true));
 });
 
-function setProvider(p, updateInput = true) {
+function setProvider(p, _updateInput = true) {
   state.provider = p;
   document.querySelectorAll(".provider-card").forEach((c) => {
     c.classList.toggle("selected", c.dataset.provider === p);

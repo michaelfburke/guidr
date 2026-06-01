@@ -2,6 +2,9 @@ import { exportSession } from "../export.js";
 import { db } from "../db.js";
 import { createAnnotator, renderAnnotated } from "./annotate.js";
 import { ICONS } from "./icons.js";
+import { sw, escHtml, slugify, timeAgo, formatMs, formatBytes, formatApiError, log } from "../utils.js";
+
+const $ = (id) => document.getElementById(id);
 
 // ── State ──────────────────────────────────────────────────────────────────
 let isRecording = false;
@@ -632,82 +635,10 @@ document.addEventListener("click", (e) => {
 // `recordingStartedAt`, so playback should feel like one artifact. We bind a
 // hidden <audio> element to the video player's events: play, pause, seek,
 // rate, volume, and end. The native video controls become the unified
-// transport. The screen recording has no audio track, so the volume slider
-// on those controls naturally becomes the narration volume.
-let narrationSyncBound = false;
-
-function bindNarrationSync() {
-  if (narrationSyncBound) return;
-  narrationSyncBound = true;
-
-  const syncTime = () => {
-    if (!narrationAudio.src) return;
-    const drift = narrationAudio.currentTime - srcVideo.currentTime;
-    if (Math.abs(drift) > 0.15) narrationAudio.currentTime = srcVideo.currentTime;
-  };
-
-  srcVideo.addEventListener("play", () => {
-    if (!narrationAudio.src) return;
-    syncTime();
-    narrationAudio.play().catch(() => {});
-  });
-  srcVideo.addEventListener("pause", () => narrationAudio.pause());
-  srcVideo.addEventListener("ended", () => narrationAudio.pause());
-  srcVideo.addEventListener("seeked", () => {
-    if (!narrationAudio.src) return;
-    syncTime();
-    if (!srcVideo.paused) narrationAudio.play().catch(() => {});
-  });
-  srcVideo.addEventListener("ratechange", () => {
-    narrationAudio.playbackRate = srcVideo.playbackRate;
-  });
-}
-
-async function loadNarrationIntoPlayer(sessionId) {
-  if (narrationObjectUrl) {
-    try { URL.revokeObjectURL(narrationObjectUrl); } catch {}
-    narrationObjectUrl = null;
-  }
-  narrationAudio.removeAttribute("src");
-  narrationAudio.load();
-  setNarrationOverlayVisible(false);
-
-  let voice;
-  try {
-    voice = await db.getVoiceRecording(sessionId);
-  } catch (err) {
-    console.warn("[Guidr] getVoiceRecording failed:", err);
-    return;
-  }
-  if (!voice?.blob) return;
-
-  narrationObjectUrl = URL.createObjectURL(voice.blob);
-  narrationAudio.src = narrationObjectUrl;
-  narrationAudio.playbackRate = srcVideo.playbackRate;
-  await applyStoredNarrationVolume();
-  bindNarrationSync();
-  setNarrationOverlayVisible(true);
-}
-
 function setNarrationOverlayVisible(visible) {
   if (!narrationVol || !videoPane) return;
   narrationVol.hidden = !visible;
   videoPane.classList.toggle("has-voice", !!visible);
-}
-
-async function applyStoredNarrationVolume() {
-  const { narrationVolume: vol, narrationMuted: muted } =
-    await chrome.storage.local.get(["narrationVolume", "narrationMuted"]);
-  const v = typeof vol === "number" ? vol : 1;
-  const m = !!muted;
-  narrationAudio.volume = v;
-  narrationAudio.muted = m;
-  if (narrationVolume) narrationVolume.value = String(v);
-  narrationVol?.classList.toggle("muted", m);
-  if (narrationMute) {
-    narrationMute.setAttribute("aria-label", m ? "Unmute narration" : "Mute narration");
-    narrationMute.setAttribute("title", m ? "Unmute narration" : "Mute narration");
-  }
 }
 
 narrationVolume?.addEventListener("input", () => {
@@ -821,14 +752,6 @@ function openSession(sessionId) {
   });
 }
 
-function normalizeStep(s) {
-  return {
-    included: true,
-    mediaMode: "screenshot",
-    ...s,
-  };
-}
-
 async function loadRecordingIntoPlayers(sessionId) {
   if (recordingObjectUrl) URL.revokeObjectURL(recordingObjectUrl);
   if (extractorObjectUrl) URL.revokeObjectURL(extractorObjectUrl);
@@ -840,14 +763,14 @@ async function loadRecordingIntoPlayers(sessionId) {
   // recording into an empty object.
   const rec = await db.getRecording(sessionId);
   if (!rec?.blob) {
-    console.log("[Guidr] no recording blob for session", sessionId);
+    log("[Guidr] no recording blob for session", sessionId);
     srcVideo.removeAttribute("src");
     srcVideo.style.display = "none";
     extractor.removeAttribute("src");
     videoPane.classList.add("empty");
     return;
   }
-  console.log("[Guidr] loaded recording blob", { bytes: rec.byteSize, type: rec.mimeType });
+  log("[Guidr] loaded recording blob", { bytes: rec.byteSize, type: rec.mimeType });
   videoPane.classList.remove("empty");
   recordingObjectUrl = URL.createObjectURL(rec.blob);
   extractorObjectUrl = URL.createObjectURL(rec.blob);
@@ -897,21 +820,6 @@ function renderChapterRail() {
     });
     chapterRail.appendChild(chip);
   });
-}
-
-async function populateRailThumbnails() {
-  if (!extractor.src) return;
-  for (const step of steps) {
-    if (thumbCache.has(step.id)) continue;
-    try {
-      const dataUrl = await extractFrame(step.tsMs);
-      thumbCache.set(step.id, dataUrl);
-      const chip = chapterRail.querySelector(`.chip[data-id="${step.id}"] .chip-thumb`);
-      if (chip) chip.src = dataUrl;
-    } catch (err) {
-      console.warn("[Guidr] thumb extraction failed for step", step.index, ":", err.message);
-    }
-  }
 }
 
 // ── Step editor ────────────────────────────────────────────────────────────
@@ -1833,7 +1741,7 @@ async function doDocumentExport(fmt, action = "download") {
     if (step.mediaMode === "gif" && extractor.src) {
       try {
         screenshot = await getOrEncodeGif(step);
-        console.log("[Guidr] export: gif for step", step.index, "·", Math.round((screenshot?.length || 0) / 1024), "KB");
+        log("[Guidr] export: gif for step", step.index, "·", Math.round((screenshot?.length || 0) / 1024), "KB");
       } catch (err) {
         console.warn("[Guidr] export: gif encoding failed for step", step.index, ":", err.message);
       }
@@ -1844,7 +1752,7 @@ async function doDocumentExport(fmt, action = "download") {
         if (step.annotations && step.annotations.length) {
           screenshot = await renderAnnotated(screenshot, step.annotations, brand);
         }
-        console.log("[Guidr] export: extracted frame for step", step.index, "at", step.tsMs, "ms ·", Math.round((screenshot?.length || 0) / 1024), "KB");
+        log("[Guidr] export: extracted frame for step", step.index, "at", step.tsMs, "ms ·", Math.round((screenshot?.length || 0) / 1024), "KB");
       } catch (err) {
         console.warn("[Guidr] export: frame extraction failed for step", step.index, ":", err.message);
       }
@@ -1906,38 +1814,6 @@ function updateCharCounts() {
 function autoResize(ta) {
   ta.style.height = "auto";
   ta.style.height = ta.scrollHeight + "px";
-}
-
-// ── Utilities ──────────────────────────────────────────────────────────────
-function sw(msg) {
-  return new Promise(res => chrome.runtime.sendMessage(msg, (r) => res(r || null)));
-}
-function $(id) { return document.getElementById(id); }
-function escHtml(s) {
-  return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-}
-function slugify(s) {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,50);
-}
-function timeAgo(ts) {
-  if (!ts) return "";
-  const d = Date.now()-ts;
-  if (d < 60000) return "just now";
-  if (d < 3600000) return `${Math.floor(d/60000)}m ago`;
-  if (d < 86400000) return `${Math.floor(d/3600000)}h ago`;
-  return `${Math.floor(d/86400000)}d ago`;
-}
-function formatMs(ms) {
-  const total = Math.max(0, ms || 0) / 1000;
-  const m = Math.floor(total / 60);
-  const s = (total - m * 60).toFixed(1);
-  return `${m}:${s.padStart(4, "0")}`;
-}
-function formatBytes(bytes) {
-  if (!bytes) return "0 KB";
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
 // ── In-panel confirm modal ────────────────────────────────────────────────
@@ -2014,32 +1890,3 @@ function endProgressToast(finalMsg, ms = 2600) {
   toast(finalMsg, ms);
 }
 
-function formatApiError(raw) {
-  if (!raw) return "Something went wrong. Check the service worker console.";
-  const s = String(raw);
-  if (/\b429\b|quota|rate.?limit|resource_exhausted/i.test(s)) {
-    const retryMatch = s.match(/retry after (\d+(?:\.\d+)?)s/i);
-    const waitHint = retryMatch
-      ? ` Try again in ~${Math.ceil(Number(retryMatch[1]))}s.`
-      : " Wait a moment and retry, or switch model in Settings.";
-    const apiMsg = s
-      .replace(/^\w+\s+\d{3}:\s*/, "")
-      .replace(/\s*\(retry after [^)]+\)\s*$/i, "")
-      .trim();
-    const detail = apiMsg.length > 140 ? apiMsg.slice(0, 137) + "…" : apiMsg;
-    return `Rate limit: ${detail}.${waitHint}`;
-  }
-  if (/insufficient|billing|payment.?required|\b402\b/i.test(s)) {
-    return "Account has no credits. Top up at your provider's billing page, then retry.";
-  }
-  if (/\b401\b|unauthorized|invalid.?api.?key|api.?key.?not.?valid/i.test(s)) {
-    return "API key was rejected. Re-check it in Settings under Provider.";
-  }
-  if (/\b404\b|model.*not.?(found|exist)|no.?such.?model/i.test(s)) {
-    return "Selected model isn't available for your key. Pick a different one in Settings.";
-  }
-  if (/\b403\b|permission|forbidden|safety|blocked/i.test(s)) {
-    return "Provider refused the request (permission or safety filter). Try a different model.";
-  }
-  return s.length > 180 ? s.slice(0, 177) + "…" : s;
-}

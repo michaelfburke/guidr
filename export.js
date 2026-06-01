@@ -177,7 +177,7 @@ function exportJson(session) {
   // Strip screenshot blobs to keep file size manageable — screenshots are large
   const slim = {
     ...session,
-    steps: session.steps.map(({ screenshotBefore, screenshotAfter, ...rest }) => rest),
+    steps: session.steps.map(({ screenshotBefore: _b, screenshotAfter: _a, ...rest }) => rest),
     _guidr_export: { version: "0.1", exportedAt: new Date().toISOString() },
   };
   return {
