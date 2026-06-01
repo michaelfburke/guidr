@@ -1,0 +1,24 @@
+{
+  "name": "guidr",
+  "version": "0.1.0",
+  "description": "Click through any SaaS product and generate polished step-by-step guides with AI.",
+  "private": true,
+  "type": "module",
+  "homepage": "https://github.com/michaelfburke/guidr",
+  "license": "MIT",
+  "scripts": {
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "@vitest/coverage-v8": "^3.0.5",
+    "eslint": "^9.18.0",
+    "fake-indexeddb": "^6.0.0",
+    "globals": "^15.14.0",
+    "jsdom": "^26.0.0",
+    "vitest": "^3.0.5"
+  }
+}

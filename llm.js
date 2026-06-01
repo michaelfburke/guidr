@@ -97,7 +97,7 @@ async function compressScreenshot(dataUrl, maxPx, quality) {
 
 // ─── Target pruning ───────────────────────────────────────────────────────────
 
-function pruneTarget(t) {
+export function pruneTarget(t) {
   if (!t) return "Unknown";
   const parts = [];
   if (t.ariaLabel)        parts.push(`aria-label: "${t.ariaLabel}"`);
@@ -114,7 +114,7 @@ function pruneTarget(t) {
 
 // ─── Prompt construction ──────────────────────────────────────────────────────
 
-function buildSystemPrompt(toneGuide = "", examples = []) {
+export function buildSystemPrompt(toneGuide = "", examples = []) {
   const tone = toneGuide.trim() || `• Active voice, second person ("you").
 • Action-first titles ("Enable two-factor authentication", not "How to enable…").
 • Body: one sentence of what to do + one sentence of why/outcome. ≤35 words total.
@@ -159,7 +159,7 @@ Only use this if the screenshot is genuinely blank or missing — never because 
 {"title":"Uncaptured step","body":"Screenshot was unavailable for this step."}`.trim();
 }
 
-function buildUserText(step, prunedTarget) {
+export function buildUserText(step, prunedTarget) {
   return `Page: "${step.pageTitle}" (${step.url.slice(0, 120)})
 Step index: ${step.index + 1}
 Element: ${prunedTarget}
@@ -262,7 +262,7 @@ async function httpError(res, provider) {
   return err;
 }
 
-function buildAnthropicContent(userText, screenshotDataUrl) {
+export function buildAnthropicContent(userText, screenshotDataUrl) {
   const content = [{ type: "text", text: userText }];
   if (screenshotDataUrl) {
     const base64 = screenshotDataUrl.split(",")[1];
@@ -316,7 +316,7 @@ async function openAIFetch(url, apiKey, extraHeaders, model, system, userContent
   return res.json();
 }
 
-function buildOpenAIContent(userText, screenshotDataUrl) {
+export function buildOpenAIContent(userText, screenshotDataUrl) {
   if (!screenshotDataUrl) return userText;
   return [
     { type: "text", text: userText },
@@ -369,7 +369,7 @@ async function callGeminiText(settings, system, userText) {
   return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
 }
 
-function buildGeminiParts(userText, screenshotDataUrl) {
+export function buildGeminiParts(userText, screenshotDataUrl) {
   const parts = [{ text: userText }];
   if (screenshotDataUrl) {
     const base64 = screenshotDataUrl.split(",")[1];
@@ -417,7 +417,7 @@ async function callOpenRouterText(settings, system, userText) {
 
 // ─── JSON parser (resilient) ──────────────────────────────────────────────────
 
-function parseJson(raw) {
+export function parseJson(raw) {
   const cleaned = raw.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
 
   // Strict parse first.
