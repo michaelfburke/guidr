@@ -4,8 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Guidr Editor</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700\&family=JetBrains+Mono:wght@400;500\&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../fonts/fonts.css"/>
   <style>
     :root {
       --bg:      #09090e;
@@ -110,6 +109,17 @@
     }
     .btn-export:hover { filter: brightness(1.1); transform: translateY(-1px); }
     .btn-export:active { transform: translateY(0); }
+    .btn-enrich-all {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: var(--accentd); border: 1px solid var(--accent);
+      color: var(--text); border-radius: 8px; padding: 7px 12px;
+      font-family: var(--font); font-size: 12px; font-weight: 700;
+      cursor: pointer; transition: all 0.15s; white-space: nowrap; flex-shrink: 0;
+    }
+    .btn-enrich-all:hover { background: var(--accent); color: #fff; }
+    .btn-enrich-all[hidden] { display: none; }
+    .btn-enrich-all:disabled { opacity: 0.5; cursor: default; }
+    .btn-enrich-all:disabled:hover { background: var(--accentd); color: var(--text); }
     .export-menu {
       position: absolute; right: 0; top: calc(100% + 6px); z-index: 100;
       background: var(--s2); border: 1px solid var(--border2);
@@ -142,7 +152,7 @@
     .editor-layout {
       flex: 1; display: grid;
       grid-template-columns: 1fr 440px;
-      grid-template-rows: 1fr 96px;
+      grid-template-rows: 1fr 132px;
       overflow: hidden; min-height: 0;
     }
 
@@ -189,6 +199,26 @@
       background: #000; border-top: 1px solid var(--border); display: none;
     }
     #srcVideo.gif-mode { display: block; }
+    /* Watch mode: play the full recording over the whole frame view. */
+    #srcVideo.watch-mode {
+      display: block; inset: 0; width: 100%; height: 100%;
+      max-height: 100%; border-top: none; z-index: 6;
+    }
+    /* Watch-recording toggle — mirrors the narration overlay, top-left. */
+    .watch-btn {
+      position: absolute; top: 12px; left: 12px; z-index: 8;
+      display: none; align-items: center; gap: 6px;
+      background: rgba(9,9,14,0.75); backdrop-filter: blur(8px);
+      border: 1px solid var(--border2); border-radius: 999px;
+      padding: 6px 12px 6px 10px; color: #fff; cursor: pointer;
+      font-family: var(--font); font-size: 11px; font-weight: 600;
+      opacity: 0.7; transition: opacity 0.15s, border-color 0.15s;
+    }
+    .frame-view:hover .watch-btn, .watch-btn:focus-visible { opacity: 1; }
+    .watch-btn:hover { border-color: var(--accent); }
+    .watch-btn .ico { width: 13px; height: 13px; }
+    /* Shown whenever a recording is loaded (set via JS). */
+    .frame-view.has-video .watch-btn { display: inline-flex; }
     .narration-vol {
       position: absolute; top: 12px; right: 12px; z-index: 8;
       display: none; align-items: center; gap: 6px;
@@ -197,7 +227,9 @@
       padding: 5px 10px 5px 6px; opacity: 0.55; transition: opacity 0.15s;
     }
     .narration-vol[hidden] { display: none !important; }
-    .frame-view.has-voice .narration-vol { display: flex; }
+    /* Narration volume only makes sense while the recording is on screen —
+       i.e. watch mode or a GIF step, not while viewing a static screenshot. */
+    .frame-view.has-voice.show-video .narration-vol { display: flex; }
     .frame-view:hover .narration-vol, .narration-vol:focus-within { opacity: 1; }
     .narration-vol .nv-btn {
       background: transparent; border: none; cursor: pointer;
@@ -386,9 +418,9 @@
     .filmstrip {
       grid-column: 1 / -1; grid-row: 2;
       display: flex; align-items: center; gap: 8px;
-      padding: 8px 16px;
+      padding: 10px 16px;
       background: var(--s1); border-top: 1px solid var(--border);
-      overflow-x: auto;
+      overflow-x: auto; overflow-y: hidden; position: relative;
       scrollbar-width: thin; scrollbar-color: var(--border2) transparent;
     }
     .filmstrip::-webkit-scrollbar { height: 3px; }
@@ -432,6 +464,14 @@
       background: var(--s2); line-height: 1.3; transition: color 0.13s;
     }
     .chip.active .chip-title, .chip:hover .chip-title { color: var(--text); }
+    .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .chip.dragging { opacity: 0.4; pointer-events: none; }
+    .reorder-indicator {
+      position: absolute; top: 0; bottom: 0; width: 3px;
+      background: var(--accent); border-radius: 2px;
+      pointer-events: none; z-index: 10;
+      transform: translateX(-50%);
+    }
 
     /* Spinner, toasts, modals */
     .spin {
@@ -517,6 +557,11 @@
         </div>
       </div>
     </div>
+    <button class="btn-enrich-all" id="enrichAllTopBtn" type="button" hidden
+            title="Generate AI title and description for every step that doesn't have one yet">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px"><path d="M12 3v3m0 12v3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1M3 12h3m12 0h3M5.6 18.4l2.1-2.1m8.6-8.6 2.1-2.1"/></svg>
+      <span id="enrichAllTopLabel">Enrich all</span>
+    </button>
     <div class="export-wrap">
       <button class="btn-export" id="exportBtn" type="button" aria-haspopup="menu" aria-expanded="false">
         Export
@@ -572,6 +617,11 @@
     </div>
     <img class="frame-img" id="frameImg" alt=""/>
     <video id="srcVideo" preload="auto" controls controlsList="nodownload"></video>
+    <button class="watch-btn" id="watchBtn" type="button" title="Play the screen recording">
+      <svg class="ico nv-ico-on" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 4 20 12 6 20 6 4"/></svg>
+      <svg class="ico nv-ico-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      <span id="watchBtnLabel">Watch recording</span>
+    </button>
     <div class="narration-vol" id="narrationVol" hidden>
       <button class="nv-btn" id="narrationMute" type="button" aria-label="Mute narration" title="Mute narration">
         <svg class="ico nv-ico-on"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
@@ -589,7 +639,8 @@
         <div class="annot-tool-sep"></div>
         <button class="annot-tool" id="annotUndo" data-hint="Undo last annotation" title="Undo last" aria-label="Undo"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></svg></button>
         <button class="annot-tool" id="annotClear" data-hint="Clear all annotations" title="Clear all" aria-label="Clear all"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
-        <button class="annot-tool right" id="annotClose" data-hint="Close annotations" title="Close annotations" aria-label="Close"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        <button class="annot-tool right" id="annotBrandBtn" data-hint="Edit annotation colors in Branding settings" title="Brand colors — opens Settings" aria-label="Brand colors"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.555C21.965 6.012 17.461 2 12 2Z"/></svg></button>
+        <button class="annot-tool" id="annotClose" data-hint="Close annotations" title="Close annotations" aria-label="Close"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
       <div class="annot-hint" id="annotHint">&nbsp;</div>
       <div class="annot-canvas-wrap"><canvas class="annot-canvas" id="annotCanvas" width="800" height="450"></canvas></div>

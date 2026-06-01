@@ -4,8 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Guidr — Settings</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../fonts/fonts.css"/>
   <style>
     :root {
       --bg:       #09090e;
@@ -87,6 +86,12 @@
     }
     nav a:hover, nav a.active { background: var(--s2); color: var(--text); }
     nav a.active { color: var(--accent2); }
+    nav a.nav-back {
+      color: var(--text); font-weight: 600; margin-bottom: 14px;
+      border: 1px solid var(--border2);
+    }
+    nav a.nav-back:hover { border-color: var(--accent); background: var(--s2); }
+    nav a.nav-back.active { color: var(--text); }
     nav a .ico { font-size: 15px; }
     nav .spacer { flex: 1; }
     nav .version { font-size: 11px; color: var(--muted); padding: 0 10px; }
@@ -324,6 +329,10 @@
   <!-- ── Sidebar nav ── -->
   <nav>
     <div class="brand">Guidr<em>.</em></div>
+    <a href="#" class="nav-back" id="backToGuides" title="Open the Guidr panel with your guides">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><polyline points="15 18 9 12 15 6"/></svg>
+      Back to guides
+    </a>
     <a href="#" class="active" data-section="provider">Provider</a>
     <a href="#" data-section="tone">Tone of voice</a>
     <a href="#" data-section="examples">Examples</a>

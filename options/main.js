@@ -92,13 +92,42 @@ function applyState() {
 }
 
 // ── Navigation ─────────────────────────────────────────────────────────────
+function showSection(name) {
+  const link = document.querySelector(`nav a[data-section="${name}"]`);
+  const section = document.getElementById(`section-${name}`);
+  if (!link || !section) return;
+  document.querySelectorAll("nav a").forEach((a) => a.classList.remove("active"));
+  document.querySelectorAll("section").forEach((s) => s.classList.remove("active"));
+  link.classList.add("active");
+  section.classList.add("active");
+}
+
 document.querySelectorAll("nav a[data-section]").forEach((link) => {
   link.addEventListener("click", (e) => {
     e.preventDefault();
-    document.querySelectorAll("nav a").forEach((a) => a.classList.remove("active"));
-    document.querySelectorAll("section").forEach((s) => s.classList.remove("active"));
-    link.classList.add("active");
-    document.getElementById(`section-${link.dataset.section}`).classList.add("active");
+    showSection(link.dataset.section);
+  });
+});
+
+// Deep link: editor's "Brand colors" shortcut opens options/index.html#branding.
+if (location.hash) {
+  const target = location.hash.replace(/^#/, "");
+  if (document.getElementById(`section-${target}`)) showSection(target);
+}
+
+// "Back to guides" — reopens the Guidr side panel (where the guide list lives).
+// chrome.sidePanel.open() must be called synchronously inside the user gesture;
+// awaiting windows.getCurrent() first would consume the gesture and the call
+// would be rejected. So we cache the window id up front and call open()
+// without awaiting anything beforehand.
+let currentWindowId = null;
+chrome.windows.getCurrent().then((w) => { currentWindowId = w?.id ?? null; }).catch(() => {});
+
+document.getElementById("backToGuides")?.addEventListener("click", (e) => {
+  e.preventDefault();
+  const opts = currentWindowId != null ? { windowId: currentWindowId } : {};
+  Promise.resolve(chrome.sidePanel.open(opts)).catch((err) => {
+    console.warn("[Guidr] Could not open side panel:", err);
   });
 });
 
@@ -107,7 +136,7 @@ document.querySelectorAll(".provider-card").forEach((card) => {
   card.addEventListener("click", () => setProvider(card.dataset.provider, true));
 });
 
-function setProvider(p, updateInput = true) {
+function setProvider(p, _updateInput = true) {
   state.provider = p;
   document.querySelectorAll(".provider-card").forEach((c) => {
     c.classList.toggle("selected", c.dataset.provider === p);

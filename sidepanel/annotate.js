@@ -202,29 +202,7 @@ export function createAnnotator({ canvas, getFrame, getBrand, getAnnotations, on
   }
 
   function pointToPct(e) {
-    // The canvas uses object-fit: contain, so the pixel buffer is rendered
-    // letterboxed inside the CSS box whenever the box's aspect doesn't match
-    // the buffer's. Mapping clicks against the full CSS box would put
-    // annotations off-center as you move away from the centre — compute the
-    // inner image rect first, then map relative to that.
-    const rect = canvas.getBoundingClientRect();
-    const bufferAspect = canvas.width / canvas.height;
-    const boxAspect = rect.width / rect.height;
-    let imgW, imgH, imgX, imgY;
-    if (bufferAspect > boxAspect) {
-      imgW = rect.width;
-      imgH = rect.width / bufferAspect;
-      imgX = 0;
-      imgY = (rect.height - imgH) / 2;
-    } else {
-      imgH = rect.height;
-      imgW = rect.height * bufferAspect;
-      imgX = (rect.width - imgW) / 2;
-      imgY = 0;
-    }
-    const x = (e.clientX - rect.left - imgX) / imgW;
-    const y = (e.clientY - rect.top - imgY) / imgH;
-    return { x: clamp01(x), y: clamp01(y) };
+    return mapPointToPct(e.clientX, e.clientY, canvas.getBoundingClientRect(), canvas.width, canvas.height);
   }
 
   function onDown(e) {
@@ -267,7 +245,37 @@ export function createAnnotator({ canvas, getFrame, getBrand, getAnnotations, on
   return { setTool, redraw, destroy };
 }
 
-function buildAnnotationFromDrag(tool, start, end, existing, commit = false) {
+/**
+ * Map a client-space point onto 0-1 fractions of the canvas's pixel buffer.
+ *
+ * The canvas renders with object-fit: contain, so the buffer is letterboxed
+ * inside its CSS box whenever the aspect ratios differ. Mapping against the
+ * full CSS box would push annotations off-centre away from the middle — so we
+ * compute the inner image rect first, then map relative to that.
+ *
+ * Pure (no DOM access) so it can be unit-tested with a plain rect object.
+ */
+export function mapPointToPct(clientX, clientY, rect, bufferW, bufferH) {
+  const bufferAspect = bufferW / bufferH;
+  const boxAspect = rect.width / rect.height;
+  let imgW, imgH, imgX, imgY;
+  if (bufferAspect > boxAspect) {
+    imgW = rect.width;
+    imgH = rect.width / bufferAspect;
+    imgX = 0;
+    imgY = (rect.height - imgH) / 2;
+  } else {
+    imgH = rect.height;
+    imgW = rect.height * bufferAspect;
+    imgX = (rect.width - imgW) / 2;
+    imgY = 0;
+  }
+  const x = (clientX - rect.left - imgX) / imgW;
+  const y = (clientY - rect.top - imgY) / imgH;
+  return { x: clamp01(x), y: clamp01(y) };
+}
+
+export function buildAnnotationFromDrag(tool, start, end, existing, commit = false) {
   const id = `ann_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
   if (tool === "circle") {
     // Click-to-place: ignore drag distance, anchor at end point.
@@ -290,4 +298,6 @@ function buildAnnotationFromDrag(tool, start, end, existing, commit = false) {
   return null;
 }
 
-function clamp01(v) { return Math.max(0, Math.min(1, v)); }
+export function clamp01(v) {
+  return Math.max(0, Math.min(1, v));
+}

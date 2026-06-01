@@ -2,6 +2,10 @@ import { exportSession } from "../export.js";
 import { db } from "../db.js";
 import { createAnnotator, renderAnnotated } from "./annotate.js";
 import { ICONS } from "./icons.js";
+import { sw, escHtml, slugify, timeAgo, formatMs, formatBytes, formatApiError, log } from "../utils.js";
+import { makeReorderable } from "./reorder.js";
+
+const $ = (id) => document.getElementById(id);
 
 // ── State ──────────────────────────────────────────────────────────────────
 let isRecording = false;
@@ -78,6 +82,7 @@ const gifSetEndBtn   = $("gifSetEndBtn");
 const gifRangeReadout = $("gifRangeReadout");
 const gifPreviewImg  = $("gifPreviewImg");
 const mediaPills     = document.querySelectorAll(".media-pill[data-mode]");
+const useFrameBtn    = $("useFrameBtn");
 
 // Cap auto-encoded GIFs at this width — full-HD recordings encoded at native
 // resolution produce 10–30MB GIFs that some renderers (Intercom in particular)
@@ -136,7 +141,22 @@ chrome.storage.onChanged.addListener((changes, area) => {
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === "SW_STEP_CAPTURED") onStepCaptured(msg.payload.step);
   if (msg.type === "SW_STEP_ENRICHED") onStepEnriched(msg.payload.step);
+  if (msg.type === "SW_MARKERS_STATUS") setMarkersWarning(!msg.active);
 });
+
+function setMarkersWarning(show) {
+  const el = $("coachLine");
+  if (!el) return;
+  if (show) {
+    el.textContent = "⚠︎ Step capture is blocked on this page. Your video is still recording — switch to your product tab to capture clicks.";
+    el.style.display = "";
+    el.classList.add("warn");
+  } else {
+    el.textContent = "Walk through your product. Each click captures a step. Stop when you’re done.";
+    el.style.display = "";
+    el.classList.remove("warn");
+  }
+}
 
 // ── Navigation ─────────────────────────────────────────────────────────────
 $("btn-home").addEventListener("click", () => showView("v-home"));
@@ -194,6 +214,14 @@ recBtn.addEventListener("click", async () => {
       voicePrepared = true;
     } else {
       showVoicePrepError(voicePrep);
+    }
+
+    // First-run hint: show a coach toast before the picker opens so the user
+    // knows to pick the tab or window they want to walk through.
+    const { pickerHintShown } = await chrome.storage.local.get(["pickerHintShown"]);
+    if (!pickerHintShown) {
+      toast("Pick the tab or window you want to walk through in the picker", 4000);
+      chrome.storage.local.set({ pickerHintShown: true });
     }
 
     let streamId;
@@ -279,6 +307,10 @@ recBtn.addEventListener("click", async () => {
       return;
     }
 
+    // If the starting page blocks content-script injection, warn the user
+    // immediately so they know to navigate to their product before clicking.
+    if (res.markersActive === false) setMarkersWarning(true);
+
     recBtn.classList.add("getready");
     recLabel.textContent = "Get ready…";
     await new Promise((r) => setTimeout(r, STARTUP_COUNTDOWN_MS));
@@ -321,9 +353,17 @@ recBtn.addEventListener("click", async () => {
     $("sessionsSection").style.display = "none";
 
     const { seenFirstRecording } = await chrome.storage.local.get("seenFirstRecording");
-    $("coachLine").style.display = seenFirstRecording ? "none" : "";
-    if (!seenFirstRecording) {
+    const coachEl = $("coachLine");
+    // If markers are already blocked, setMarkersWarning already set the warn
+    // variant. Otherwise show the normal coach hint on first use.
+    if (res.markersActive === false) {
+      coachEl.style.display = "";
+    } else if (!seenFirstRecording) {
+      coachEl.style.display = "";
+      coachEl.textContent = "Walk through your product. Each click captures a step. Stop when you're done.";
       chrome.storage.local.set({ seenFirstRecording: true });
+    } else {
+      coachEl.style.display = "none";
     }
 
     // Green "go" burst announcing recording is live, then settle into the
@@ -366,7 +406,11 @@ async function finalizeRecording() {
     }
   } catch (err) {
     console.error("[Guidr] saveRecording failed:", err);
-    errorToast("Could not save recording: " + err.message);
+    if (err.name === "QuotaExceededError") {
+      errorToast("Storage is full — delete old guides or their video tracks to free space, then re-record.", 8000);
+    } else {
+      errorToast("Could not save recording: " + err.message);
+    }
   }
 
   // Stop the offscreen mic recorder. The offscreen doc writes the blob to
@@ -386,9 +430,19 @@ async function finalizeRecording() {
   setRecording(false);
   captureSection.style.display = "none";
   $("sessionsSection").style.display = "";
-  toast("Recording stopped");
   loadSessions();
-  if (steps.length) setTimeout(() => openSession(sessionId), 300);
+  if (steps.length) {
+    toast("Recording stopped");
+    setTimeout(() => openSession(sessionId), 300);
+  } else {
+    // No chapter markers were captured. The video is saved, but the user
+    // should know so they can re-record on an interactive page or add steps
+    // manually in the editor.
+    errorToast(
+      "Recording saved, but no steps were captured. Open the guide to add steps manually, or re-record on your product page.",
+      8000
+    );
+  }
 }
 
 function pickMimeType() {
@@ -516,6 +570,7 @@ function onStepEnriched(step) {
     loadStepFields(step);
   }
   renderChapterRail();
+  updateEnrichAllQuickBtn();
 }
 
 // ── Sessions list ──────────────────────────────────────────────────────────
@@ -632,82 +687,10 @@ document.addEventListener("click", (e) => {
 // `recordingStartedAt`, so playback should feel like one artifact. We bind a
 // hidden <audio> element to the video player's events: play, pause, seek,
 // rate, volume, and end. The native video controls become the unified
-// transport. The screen recording has no audio track, so the volume slider
-// on those controls naturally becomes the narration volume.
-let narrationSyncBound = false;
-
-function bindNarrationSync() {
-  if (narrationSyncBound) return;
-  narrationSyncBound = true;
-
-  const syncTime = () => {
-    if (!narrationAudio.src) return;
-    const drift = narrationAudio.currentTime - srcVideo.currentTime;
-    if (Math.abs(drift) > 0.15) narrationAudio.currentTime = srcVideo.currentTime;
-  };
-
-  srcVideo.addEventListener("play", () => {
-    if (!narrationAudio.src) return;
-    syncTime();
-    narrationAudio.play().catch(() => {});
-  });
-  srcVideo.addEventListener("pause", () => narrationAudio.pause());
-  srcVideo.addEventListener("ended", () => narrationAudio.pause());
-  srcVideo.addEventListener("seeked", () => {
-    if (!narrationAudio.src) return;
-    syncTime();
-    if (!srcVideo.paused) narrationAudio.play().catch(() => {});
-  });
-  srcVideo.addEventListener("ratechange", () => {
-    narrationAudio.playbackRate = srcVideo.playbackRate;
-  });
-}
-
-async function loadNarrationIntoPlayer(sessionId) {
-  if (narrationObjectUrl) {
-    try { URL.revokeObjectURL(narrationObjectUrl); } catch {}
-    narrationObjectUrl = null;
-  }
-  narrationAudio.removeAttribute("src");
-  narrationAudio.load();
-  setNarrationOverlayVisible(false);
-
-  let voice;
-  try {
-    voice = await db.getVoiceRecording(sessionId);
-  } catch (err) {
-    console.warn("[Guidr] getVoiceRecording failed:", err);
-    return;
-  }
-  if (!voice?.blob) return;
-
-  narrationObjectUrl = URL.createObjectURL(voice.blob);
-  narrationAudio.src = narrationObjectUrl;
-  narrationAudio.playbackRate = srcVideo.playbackRate;
-  await applyStoredNarrationVolume();
-  bindNarrationSync();
-  setNarrationOverlayVisible(true);
-}
-
 function setNarrationOverlayVisible(visible) {
   if (!narrationVol || !videoPane) return;
   narrationVol.hidden = !visible;
   videoPane.classList.toggle("has-voice", !!visible);
-}
-
-async function applyStoredNarrationVolume() {
-  const { narrationVolume: vol, narrationMuted: muted } =
-    await chrome.storage.local.get(["narrationVolume", "narrationMuted"]);
-  const v = typeof vol === "number" ? vol : 1;
-  const m = !!muted;
-  narrationAudio.volume = v;
-  narrationAudio.muted = m;
-  if (narrationVolume) narrationVolume.value = String(v);
-  narrationVol?.classList.toggle("muted", m);
-  if (narrationMute) {
-    narrationMute.setAttribute("aria-label", m ? "Unmute narration" : "Mute narration");
-    narrationMute.setAttribute("title", m ? "Unmute narration" : "Mute narration");
-  }
 }
 
 narrationVolume?.addEventListener("input", () => {
@@ -821,14 +804,6 @@ function openSession(sessionId) {
   });
 }
 
-function normalizeStep(s) {
-  return {
-    included: true,
-    mediaMode: "screenshot",
-    ...s,
-  };
-}
-
 async function loadRecordingIntoPlayers(sessionId) {
   if (recordingObjectUrl) URL.revokeObjectURL(recordingObjectUrl);
   if (extractorObjectUrl) URL.revokeObjectURL(extractorObjectUrl);
@@ -840,14 +815,14 @@ async function loadRecordingIntoPlayers(sessionId) {
   // recording into an empty object.
   const rec = await db.getRecording(sessionId);
   if (!rec?.blob) {
-    console.log("[Guidr] no recording blob for session", sessionId);
+    log("[Guidr] no recording blob for session", sessionId);
     srcVideo.removeAttribute("src");
     srcVideo.style.display = "none";
     extractor.removeAttribute("src");
     videoPane.classList.add("empty");
     return;
   }
-  console.log("[Guidr] loaded recording blob", { bytes: rec.byteSize, type: rec.mimeType });
+  log("[Guidr] loaded recording blob", { bytes: rec.byteSize, type: rec.mimeType });
   videoPane.classList.remove("empty");
   recordingObjectUrl = URL.createObjectURL(rec.blob);
   extractorObjectUrl = URL.createObjectURL(rec.blob);
@@ -884,6 +859,10 @@ function renderChapterRail() {
     chip.className = `chip${i === currentStepIdx ? " active" : ""}${step.included === false ? " excluded" : ""}`;
     chip.dataset.idx = i;
     chip.dataset.id = step.id;
+    chip.tabIndex = 0;
+    const label = step.title ? `Step ${i + 1}: ${step.title}` : `Step ${i + 1}`;
+    chip.setAttribute("aria-label", label);
+    chip.setAttribute("role", "button");
     const cached = thumbCache.get(step.id);
     chip.innerHTML = `
       <img class="chip-thumb" src="${cached || ""}" alt=""/>
@@ -891,28 +870,30 @@ function renderChapterRail() {
         <span class="chip-num">${i+1}</span>
         <span class="chip-time">${formatMs(step.tsMs)}</span>
       </div>`;
-    chip.addEventListener("click", () => {
-      currentStepIdx = i;
-      loadStepIntoEditor(i);
+    const activate = () => { currentStepIdx = i; loadStepIntoEditor(i); };
+    chip.addEventListener("click", activate);
+    chip.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activate(); }
     });
     chapterRail.appendChild(chip);
   });
+  updateEnrichAllQuickBtn();
 }
 
-async function populateRailThumbnails() {
-  if (!extractor.src) return;
-  for (const step of steps) {
-    if (thumbCache.has(step.id)) continue;
-    try {
-      const dataUrl = await extractFrame(step.tsMs);
-      thumbCache.set(step.id, dataUrl);
-      const chip = chapterRail.querySelector(`.chip[data-id="${step.id}"] .chip-thumb`);
-      if (chip) chip.src = dataUrl;
-    } catch (err) {
-      console.warn("[Guidr] thumb extraction failed for step", step.index, ":", err.message);
-    }
-  }
-}
+makeReorderable(chapterRail, {
+  getSteps: () => steps,
+  onReorder: async (reordered) => {
+    // Find the current step in the new order so the editor stays on it.
+    const activeId = steps[currentStepIdx]?.id;
+    steps = reordered;
+    currentStepIdx = Math.max(0, steps.findIndex((s) => s.id === activeId));
+    renderChapterRail();
+    // Sync the active chip scroll position.
+    const active = chapterRail.querySelector(".chip.active");
+    if (active) active.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+    await sw({ type: "SP_REORDER_STEPS", sessionId: currentSessionId, orderedIds: steps.map((s) => s.id) });
+  },
+});
 
 // ── Step editor ────────────────────────────────────────────────────────────
 function loadStepIntoEditor(idx) {
@@ -986,7 +967,38 @@ function updateAnnotateButtonState(step) {
   openAnnotBtn.title = disabled
     ? "Annotations apply to screenshot steps only"
     : "";
+  // "Use current frame" only makes sense when there's a loaded video and the
+  // step is in screenshot mode — GIF mode uses gifStartMs/gifEndMs instead.
+  useFrameBtn.hidden = !(srcVideo.src && step.mediaMode === "screenshot");
 }
+
+useFrameBtn.addEventListener("click", async () => {
+  const step = steps[currentStepIdx];
+  if (!step || step.mediaMode !== "screenshot" || !srcVideo.src) return;
+
+  const newTsMs = Math.round(srcVideo.currentTime * 1000);
+  step.tsMs = newTsMs;
+  thumbCache.delete(step.id);
+  stepTs.textContent = formatMs(newTsMs);
+
+  // Re-extract the thumbnail so the chip and preview update immediately.
+  try {
+    const dataUrl = await extractFrame(newTsMs);
+    thumbCache.set(step.id, dataUrl);
+  } catch {}
+
+  renderChapterRail();
+  const updates = {
+    title: stepTitle.value.trim(),
+    body:  stepBody.value.trim(),
+    included: step.included !== false,
+    mediaMode: step.mediaMode,
+    annotations: step.annotations || [],
+    tsMs: newTsMs,
+  };
+  await sw({ type: "SP_UPDATE_STEP", stepId: step.id, updates });
+  toast("Screenshot frame updated");
+});
 
 mediaPills.forEach((p) => {
   p.addEventListener("click", () => {
@@ -1223,6 +1235,7 @@ async function saveCurrentStep() {
     gifStartMs: step.gifStartMs,
     gifEndMs:   step.gifEndMs,
     gifFps:     step.gifFps,
+    tsMs:       step.tsMs,
   };
   Object.assign(step, updates);
   await sw({ type: "SP_UPDATE_STEP", stepId: step.id, updates });
@@ -1317,22 +1330,26 @@ $("enrichOneBtn").addEventListener("click", async () => {
   const step = steps[currentStepIdx];
   if (!step) return;
   const btn = $("enrichOneBtn");
-  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Enriching…';
+  btn.disabled = true; btn.setAttribute("aria-busy", "true");
+  btn.innerHTML = '<span class="spin"></span> Enriching…';
   let screenshotDataUrl = null;
   try { screenshotDataUrl = await extractFrame(step.tsMs); } catch {}
   const res = await sw({ type: "SP_ENRICH_STEP", stepId: step.id, sessionId: currentSessionId, screenshotDataUrl });
-  btn.disabled = false; btn.textContent = "Enrich with AI";
+  btn.disabled = false; btn.removeAttribute("aria-busy"); btn.textContent = "Enrich with AI";
   if (res?.ok) { onStepEnriched(res.step); toast("Step enriched"); }
   else errorToast(formatApiError(res?.error));
 });
 
 let enrichAllRunning = false;
-$("enrichAllBtn").addEventListener("click", async () => {
+
+async function runEnrichAll() {
   if (enrichAllRunning) return;
-  stepMoreMenu.classList.remove("open");
+  stepMoreMenu?.classList.remove("open");
   const pending = steps.filter((s) => !s.enriched);
   if (!pending.length) { toast("All steps are already enriched"); return; }
   enrichAllRunning = true;
+  $("enrichAllBtn").setAttribute("aria-busy", "true");
+  updateEnrichAllQuickBtn();
   toast(`Enriching ${pending.length} step${pending.length === 1 ? "" : "s"}…`, 4000);
   let failed = null;
   for (const step of pending) {
@@ -1343,9 +1360,29 @@ $("enrichAllBtn").addEventListener("click", async () => {
     else if (!failed) failed = res?.error;
   }
   enrichAllRunning = false;
+  $("enrichAllBtn").removeAttribute("aria-busy");
+  updateEnrichAllQuickBtn();
   if (failed) errorToast(formatApiError(failed));
   else toast("All steps enriched");
-});
+}
+
+$("enrichAllBtn").addEventListener("click", runEnrichAll);
+$("enrichAllQuickBtn").addEventListener("click", runEnrichAll);
+
+function updateEnrichAllQuickBtn() {
+  const btn = $("enrichAllQuickBtn");
+  if (!btn) return;
+  const unenriched = steps.filter((s) => !s.enriched).length;
+  if (!unenriched || enrichAllRunning) {
+    btn.hidden = true;
+    return;
+  }
+  btn.hidden = false;
+  btn.disabled = false;
+  $("enrichAllQuickLabel").textContent = unenriched === steps.length
+    ? "Enrich all"
+    : `Enrich ${unenriched}`;
+}
 
 // ── Annotation editor ──────────────────────────────────────────────────────
 const annotPane    = $("annotPane");
@@ -1833,7 +1870,7 @@ async function doDocumentExport(fmt, action = "download") {
     if (step.mediaMode === "gif" && extractor.src) {
       try {
         screenshot = await getOrEncodeGif(step);
-        console.log("[Guidr] export: gif for step", step.index, "·", Math.round((screenshot?.length || 0) / 1024), "KB");
+        log("[Guidr] export: gif for step", step.index, "·", Math.round((screenshot?.length || 0) / 1024), "KB");
       } catch (err) {
         console.warn("[Guidr] export: gif encoding failed for step", step.index, ":", err.message);
       }
@@ -1844,7 +1881,7 @@ async function doDocumentExport(fmt, action = "download") {
         if (step.annotations && step.annotations.length) {
           screenshot = await renderAnnotated(screenshot, step.annotations, brand);
         }
-        console.log("[Guidr] export: extracted frame for step", step.index, "at", step.tsMs, "ms ·", Math.round((screenshot?.length || 0) / 1024), "KB");
+        log("[Guidr] export: extracted frame for step", step.index, "at", step.tsMs, "ms ·", Math.round((screenshot?.length || 0) / 1024), "KB");
       } catch (err) {
         console.warn("[Guidr] export: frame extraction failed for step", step.index, ":", err.message);
       }
@@ -1906,38 +1943,6 @@ function updateCharCounts() {
 function autoResize(ta) {
   ta.style.height = "auto";
   ta.style.height = ta.scrollHeight + "px";
-}
-
-// ── Utilities ──────────────────────────────────────────────────────────────
-function sw(msg) {
-  return new Promise(res => chrome.runtime.sendMessage(msg, (r) => res(r || null)));
-}
-function $(id) { return document.getElementById(id); }
-function escHtml(s) {
-  return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-}
-function slugify(s) {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,50);
-}
-function timeAgo(ts) {
-  if (!ts) return "";
-  const d = Date.now()-ts;
-  if (d < 60000) return "just now";
-  if (d < 3600000) return `${Math.floor(d/60000)}m ago`;
-  if (d < 86400000) return `${Math.floor(d/3600000)}h ago`;
-  return `${Math.floor(d/86400000)}d ago`;
-}
-function formatMs(ms) {
-  const total = Math.max(0, ms || 0) / 1000;
-  const m = Math.floor(total / 60);
-  const s = (total - m * 60).toFixed(1);
-  return `${m}:${s.padStart(4, "0")}`;
-}
-function formatBytes(bytes) {
-  if (!bytes) return "0 KB";
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
 // ── In-panel confirm modal ────────────────────────────────────────────────
@@ -2014,32 +2019,3 @@ function endProgressToast(finalMsg, ms = 2600) {
   toast(finalMsg, ms);
 }
 
-function formatApiError(raw) {
-  if (!raw) return "Something went wrong. Check the service worker console.";
-  const s = String(raw);
-  if (/\b429\b|quota|rate.?limit|resource_exhausted/i.test(s)) {
-    const retryMatch = s.match(/retry after (\d+(?:\.\d+)?)s/i);
-    const waitHint = retryMatch
-      ? ` Try again in ~${Math.ceil(Number(retryMatch[1]))}s.`
-      : " Wait a moment and retry, or switch model in Settings.";
-    const apiMsg = s
-      .replace(/^\w+\s+\d{3}:\s*/, "")
-      .replace(/\s*\(retry after [^)]+\)\s*$/i, "")
-      .trim();
-    const detail = apiMsg.length > 140 ? apiMsg.slice(0, 137) + "…" : apiMsg;
-    return `Rate limit: ${detail}.${waitHint}`;
-  }
-  if (/insufficient|billing|payment.?required|\b402\b/i.test(s)) {
-    return "Account has no credits. Top up at your provider's billing page, then retry.";
-  }
-  if (/\b401\b|unauthorized|invalid.?api.?key|api.?key.?not.?valid/i.test(s)) {
-    return "API key was rejected. Re-check it in Settings under Provider.";
-  }
-  if (/\b404\b|model.*not.?(found|exist)|no.?such.?model/i.test(s)) {
-    return "Selected model isn't available for your key. Pick a different one in Settings.";
-  }
-  if (/\b403\b|permission|forbidden|safety|blocked/i.test(s)) {
-    return "Provider refused the request (permission or safety filter). Try a different model.";
-  }
-  return s.length > 180 ? s.slice(0, 177) + "…" : s;
-}

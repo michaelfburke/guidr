@@ -94,17 +94,18 @@ async function handleStartRecording({ sessionName, tabId, startedAt }, sendRespo
     steps: [],
   };
 
+  let markersActive = false;
   try {
     await injectContentScript(tabId);
     await chrome.tabs.sendMessage(tabId, { type: "GUIDR_START_RECORDING" });
-  } catch (err) {
-    // Recording can still proceed without chapter markers (e.g. on a page
-    // where the content script can't be injected) — surface a warning but
-    // keep the session active.
-    console.warn("[Guidr] could not inject content script:", err);
+    markersActive = true;
+  } catch {
+    // Recording proceeds without chapter markers (e.g. chrome://, restricted
+    // pages, no host permission). The side panel shows a persistent warning so
+    // the user knows to switch tabs before clicking through their product.
   }
 
-  sendResponse({ ok: true, sessionId });
+  sendResponse({ ok: true, sessionId, markersActive });
 }
 
 async function handleStopRecording(sendResponse) {
@@ -159,8 +160,11 @@ chrome.tabs.onUpdated.addListener(async (tabId, info) => {
   try {
     await injectContentScript(tabId);
     await chrome.tabs.sendMessage(tabId, { type: "GUIDR_START_RECORDING" });
+    chrome.runtime.sendMessage({ type: "SW_MARKERS_STATUS", active: true }).catch(() => {});
   } catch {
-    // chrome://, restricted, or no host permission — ignore.
+    // Navigated to a restricted page (chrome://, file://, etc.) — step capture
+    // is not available here. Notify the side panel so it can warn the user.
+    chrome.runtime.sendMessage({ type: "SW_MARKERS_STATUS", active: false }).catch(() => {});
   }
 });
 

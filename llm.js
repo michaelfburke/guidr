@@ -97,7 +97,7 @@ async function compressScreenshot(dataUrl, maxPx, quality) {
 
 // ─── Target pruning ───────────────────────────────────────────────────────────
 
-function pruneTarget(t) {
+export function pruneTarget(t) {
   if (!t) return "Unknown";
   const parts = [];
   if (t.ariaLabel)        parts.push(`aria-label: "${t.ariaLabel}"`);
@@ -114,7 +114,7 @@ function pruneTarget(t) {
 
 // ─── Prompt construction ──────────────────────────────────────────────────────
 
-function buildSystemPrompt(toneGuide = "", examples = []) {
+export function buildSystemPrompt(toneGuide = "", examples = []) {
   const tone = toneGuide.trim() || `• Active voice, second person ("you").
 • Action-first titles ("Enable two-factor authentication", not "How to enable…").
 • Body: one sentence of what to do + one sentence of why/outcome. ≤35 words total.
@@ -159,7 +159,7 @@ Only use this if the screenshot is genuinely blank or missing — never because 
 {"title":"Uncaptured step","body":"Screenshot was unavailable for this step."}`.trim();
 }
 
-function buildUserText(step, prunedTarget) {
+export function buildUserText(step, prunedTarget) {
   return `Page: "${step.pageTitle}" (${step.url.slice(0, 120)})
 Step index: ${step.index + 1}
 Element: ${prunedTarget}
@@ -262,7 +262,7 @@ async function httpError(res, provider) {
   return err;
 }
 
-function buildAnthropicContent(userText, screenshotDataUrl) {
+export function buildAnthropicContent(userText, screenshotDataUrl) {
   const content = [{ type: "text", text: userText }];
   if (screenshotDataUrl) {
     const base64 = screenshotDataUrl.split(",")[1];
@@ -316,7 +316,7 @@ async function openAIFetch(url, apiKey, extraHeaders, model, system, userContent
   return res.json();
 }
 
-function buildOpenAIContent(userText, screenshotDataUrl) {
+export function buildOpenAIContent(userText, screenshotDataUrl) {
   if (!screenshotDataUrl) return userText;
   return [
     { type: "text", text: userText },
@@ -329,18 +329,28 @@ function buildOpenAIContent(userText, screenshotDataUrl) {
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 const GEMINI_DEFAULT_MODEL = "gemini-2.5-flash";
 
+// Gemini 2.5 models think by default, and those thinking tokens are charged
+// against maxOutputTokens — so a small budget gets consumed reasoning and the
+// actual answer is truncated to a few words (or empty). We don't need
+// reasoning for short structured JSON, so disable it where the API allows.
+// 2.5 Pro can't fully disable thinking (min budget 128); everything else can.
+function geminiThinkingConfig(model) {
+  return /2\.5-pro/.test(model || "") ? { thinkingBudget: 128 } : { thinkingBudget: 0 };
+}
+
 async function callGemini(settings, system, userText, screenshotDataUrl) {
   const parts = buildGeminiParts(userText, screenshotDataUrl);
+  const model = settings.model || GEMINI_DEFAULT_MODEL;
   const body = {
     system_instruction: { parts: [{ text: system }] },
     contents: [{ role: "user", parts }],
     generationConfig: {
-      maxOutputTokens: 400,
+      maxOutputTokens: 1024,
       temperature: 0,
       responseMimeType: "application/json", // ← Gemini native structured output
+      thinkingConfig: geminiThinkingConfig(model),
     },
   };
-  const model = settings.model || GEMINI_DEFAULT_MODEL;
   const res = await fetch(`${GEMINI_BASE}/${model}:generateContent?key=${settings.apiKey}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -353,12 +363,16 @@ async function callGemini(settings, system, userText, screenshotDataUrl) {
 }
 
 async function callGeminiText(settings, system, userText) {
+  const model = settings.model || GEMINI_DEFAULT_MODEL;
   const body = {
     system_instruction: { parts: [{ text: system }] },
     contents: [{ role: "user", parts: [{ text: userText }] }],
-    generationConfig: { maxOutputTokens: 800, temperature: 0 },
+    generationConfig: {
+      maxOutputTokens: 2048,
+      temperature: 0,
+      thinkingConfig: geminiThinkingConfig(model),
+    },
   };
-  const model = settings.model || GEMINI_DEFAULT_MODEL;
   const res = await fetch(`${GEMINI_BASE}/${model}:generateContent?key=${settings.apiKey}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -369,7 +383,7 @@ async function callGeminiText(settings, system, userText) {
   return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
 }
 
-function buildGeminiParts(userText, screenshotDataUrl) {
+export function buildGeminiParts(userText, screenshotDataUrl) {
   const parts = [{ text: userText }];
   if (screenshotDataUrl) {
     const base64 = screenshotDataUrl.split(",")[1];
@@ -417,7 +431,7 @@ async function callOpenRouterText(settings, system, userText) {
 
 // ─── JSON parser (resilient) ──────────────────────────────────────────────────
 
-function parseJson(raw) {
+export function parseJson(raw) {
   const cleaned = raw.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
 
   // Strict parse first.

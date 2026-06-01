@@ -1,3 +1,6 @@
+const DEBUG = false;
+export const log = DEBUG ? console.log.bind(console) : () => {};
+
 export function sw(msg) {
   return new Promise(res => chrome.runtime.sendMessage(msg, (r) => res(r || null)));
 }
