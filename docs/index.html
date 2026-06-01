@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Guidr – AI Guide Maker</title>
+  <meta name="description" content="Record your screen, let AI write the guide. Guidr is a free, open-source Chrome extension for customer success teams." />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d1117;
+      --bg-card: #161b22;
+      --bg-card-hover: #1c2330;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #58a6ff;
+      --accent-glow: rgba(88, 166, 255, 0.15);
+      --accent-2: #3fb950;
+      --accent-3: #bc8cff;
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      font-size: 16px;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── NAV ── */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 2rem;
+      height: 60px;
+      background: rgba(13, 17, 23, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: var(--text);
+      text-decoration: none;
+    }
+
+    .nav-logo svg { flex-shrink: 0; }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover { color: var(--text); text-decoration: none; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.5rem 1.1rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.15s;
+      text-decoration: none;
+    }
+
+    .btn:hover { opacity: 0.85; transform: translateY(-1px); text-decoration: none; }
+    .btn:active { transform: translateY(0); }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #0d1117;
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-ghost:hover { background: var(--bg-card); }
+
+    .btn-lg {
+      padding: 0.75rem 1.75rem;
+      font-size: 1rem;
+      border-radius: var(--radius);
+    }
+
+    /* ── HERO ── */
+    .hero {
+      text-align: center;
+      padding: 6rem 2rem 4rem;
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: var(--accent-glow);
+      border: 1px solid rgba(88, 166, 255, 0.3);
+      color: var(--accent);
+      border-radius: 999px;
+      padding: 0.3rem 0.9rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      margin-bottom: 1.75rem;
+    }
+
+    h1 {
+      font-size: clamp(2.2rem, 5vw, 3.5rem);
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -0.03em;
+      margin-bottom: 1.25rem;
+    }
+
+    .gradient-text {
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent-3) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero p {
+      font-size: 1.2rem;
+      color: var(--text-muted);
+      max-width: 580px;
+      margin: 0 auto 2.5rem;
+    }
+
+    .hero-cta {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .hero-meta {
+      margin-top: 2rem;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+
+    /* ── DEMO PLACEHOLDER ── */
+    .demo-wrapper {
+      max-width: 900px;
+      margin: 0 auto 5rem;
+      padding: 0 2rem;
+    }
+
+    .demo-frame {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+    }
+
+    .demo-bar {
+      background: #1c2330;
+      border-bottom: 1px solid var(--border);
+      padding: 0.6rem 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+    }
+
+    .demo-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+
+    .demo-inner {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      min-height: 320px;
+    }
+
+    .demo-sidebar {
+      border-right: 1px solid var(--border);
+      padding: 1rem;
+    }
+
+    .demo-sidebar-title {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 0.75rem;
+    }
+
+    .demo-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.6rem;
+      padding: 0.5rem 0.6rem;
+      border-radius: 6px;
+      margin-bottom: 0.25rem;
+      cursor: default;
+    }
+
+    .demo-step.active { background: var(--accent-glow); }
+
+    .demo-step-num {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.65rem;
+      font-weight: 700;
+      flex-shrink: 0;
+      color: var(--text-muted);
+    }
+
+    .demo-step.active .demo-step-num {
+      background: var(--accent);
+      color: #0d1117;
+    }
+
+    .demo-step-label {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      line-height: 1.3;
+    }
+
+    .demo-step.active .demo-step-label { color: var(--text); }
+
+    .demo-content {
+      padding: 1.25rem 1.5rem;
+    }
+
+    .demo-content-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 0.4rem;
+    }
+
+    .demo-content-body {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: 1rem;
+    }
+
+    .demo-screenshot {
+      background: linear-gradient(135deg, #1c2330 0%, #0d1117 100%);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      height: 130px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      font-size: 0.75rem;
+    }
+
+    .demo-pills {
+      display: flex;
+      gap: 0.4rem;
+      margin-top: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .demo-pill {
+      font-size: 0.7rem;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+
+    /* ── SECTIONS ── */
+    section { padding: 5rem 2rem; }
+
+    .section-inner {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    .section-label {
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 0.6rem;
+    }
+
+    h2 {
+      font-size: clamp(1.6rem, 3vw, 2.25rem);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+      margin-bottom: 1rem;
+    }
+
+    .section-sub {
+      font-size: 1.05rem;
+      color: var(--text-muted);
+      max-width: 560px;
+      margin-bottom: 3rem;
+    }
+
+    /* ── HOW IT WORKS ── */
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1.5rem;
+      counter-reset: step;
+    }
+
+    .step-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      position: relative;
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    .step-card:hover {
+      border-color: rgba(88, 166, 255, 0.4);
+      background: var(--bg-card-hover);
+    }
+
+    .step-num {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--accent-glow);
+      border: 1px solid rgba(88, 166, 255, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 1rem;
+    }
+
+    .step-card h3 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      margin-bottom: 0.4rem;
+    }
+
+    .step-card p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    /* ── FEATURES ── */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.25rem;
+    }
+
+    .feature-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    .feature-card:hover {
+      border-color: rgba(88, 166, 255, 0.3);
+      background: var(--bg-card-hover);
+    }
+
+    .feature-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 1rem;
+    }
+
+    .feature-card h3 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      margin-bottom: 0.4rem;
+    }
+
+    .feature-card p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      line-height: 1.55;
+    }
+
+    /* ── PROVIDERS ── */
+    .providers {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .provider-badge {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 0.6rem 1.1rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text);
+      transition: border-color 0.2s;
+    }
+
+    .provider-badge:hover { border-color: rgba(88,166,255,0.4); }
+
+    /* ── EXPORTS ── */
+    .exports {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+
+    .export-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem 1.5rem;
+      transition: border-color 0.2s;
+    }
+
+    .export-card:hover { border-color: rgba(63, 185, 80, 0.4); }
+
+    .export-card h3 {
+      font-size: 0.9rem;
+      font-weight: 700;
+      margin-bottom: 0.3rem;
+      color: var(--accent-2);
+    }
+
+    .export-card p {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    /* ── PRIVACY ── */
+    .privacy-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+    }
+
+    .privacy-item {
+      display: flex;
+      gap: 0.75rem;
+      align-items: flex-start;
+    }
+
+    .privacy-check {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: rgba(63, 185, 80, 0.15);
+      border: 1px solid rgba(63, 185, 80, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .privacy-item h4 {
+      font-size: 0.88rem;
+      font-weight: 700;
+      margin-bottom: 0.15rem;
+    }
+
+    .privacy-item p {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    /* ── CTA ── */
+    .cta-section {
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      text-align: center;
+      padding: 5rem 2rem;
+    }
+
+    .cta-section h2 { margin-bottom: 1rem; }
+    .cta-section p {
+      color: var(--text-muted);
+      max-width: 480px;
+      margin: 0 auto 2rem;
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      text-align: center;
+      padding: 2rem;
+      color: var(--text-muted);
+      font-size: 0.82rem;
+      border-top: 1px solid var(--border);
+    }
+
+    footer a { color: var(--text-muted); }
+    footer a:hover { color: var(--text); }
+
+    /* ── DIVIDER ── */
+    .divider {
+      height: 1px;
+      background: var(--border);
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 640px) {
+      nav { padding: 0 1rem; }
+      .nav-links { display: none; }
+      .demo-inner { grid-template-columns: 1fr; }
+      .demo-sidebar { display: none; }
+      section { padding: 3rem 1.25rem; }
+      .hero { padding: 4rem 1.25rem 2.5rem; }
+      .demo-wrapper { padding: 0 1.25rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a class="nav-logo" href="#">
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="22" height="22" rx="5" fill="#7c6af7"/>
+      <rect x="4" y="4" width="14" height="3" fill="white"/>
+      <rect x="4" y="4" width="3" height="14" fill="white"/>
+      <rect x="4" y="15" width="14" height="3" fill="white"/>
+      <rect x="11" y="10" width="7" height="3" fill="white"/>
+    </svg>
+    Guidr
+  </a>
+  <ul class="nav-links">
+    <li><a href="#how-it-works">How it works</a></li>
+    <li><a href="#features">Features</a></li>
+    <li><a href="#privacy">Privacy</a></li>
+    <li>
+      <a class="btn btn-ghost" href="https://github.com/michaelfburke/guidr" target="_blank" rel="noopener">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
+    </li>
+    <li>
+      <a class="btn btn-ghost" style="color:#ff5e5b; border-color:#ff5e5b33;" href="https://ko-fi.com/michael2873" target="_blank" rel="noopener">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 010 8h-1"/><path d="M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+        Support
+      </a>
+    </li>
+  </ul>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="badge">
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><circle cx="6" cy="6" r="6"/></svg>
+    Free &amp; Open Source · v0.1.0
+  </div>
+  <h1>Record your screen.<br><span class="gradient-text">Let AI write the guide.</span></h1>
+  <p>Guidr is a Chrome extension that turns your screen recordings into polished step-by-step guides — automatically, with your choice of AI.</p>
+  <div class="hero-cta">
+    <a class="btn btn-primary btn-lg" href="https://github.com/michaelfburke/guidr" target="_blank" rel="noopener">
+      <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      View on GitHub
+    </a>
+    <a class="btn btn-ghost btn-lg" href="#how-it-works">See how it works</a>
+  </div>
+  <p class="hero-meta">Bring your own API key · Zero servers · Works on any SaaS</p>
+</section>
+
+<!-- DEMO MOCKUP -->
+<div class="demo-wrapper">
+  <div class="demo-frame">
+    <div class="demo-bar">
+      <div class="demo-dot" style="background:#ff5f57"></div>
+      <div class="demo-dot" style="background:#febc2e"></div>
+      <div class="demo-dot" style="background:#28c840"></div>
+    </div>
+    <div class="demo-inner">
+      <div class="demo-sidebar">
+        <div class="demo-sidebar-title">Steps · 5 recorded</div>
+        <div class="demo-step active">
+          <div class="demo-step-num">1</div>
+          <div class="demo-step-label">Navigate to Settings</div>
+        </div>
+        <div class="demo-step">
+          <div class="demo-step-num">2</div>
+          <div class="demo-step-label">Click "Integrations"</div>
+        </div>
+        <div class="demo-step">
+          <div class="demo-step-num">3</div>
+          <div class="demo-step-label">Select Slack</div>
+        </div>
+        <div class="demo-step">
+          <div class="demo-step-num">4</div>
+          <div class="demo-step-label">Paste webhook URL</div>
+        </div>
+        <div class="demo-step">
+          <div class="demo-step-num">5</div>
+          <div class="demo-step-label">Save &amp; test connection</div>
+        </div>
+      </div>
+      <div class="demo-content">
+        <div class="demo-content-title">Step 1 · Navigate to Settings</div>
+        <div class="demo-content-body">
+          Click the gear icon in the top-right corner of your dashboard to open the Settings panel. From here you can manage your workspace configuration, integrations, and user preferences.
+        </div>
+        <div class="demo-screenshot">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+          &nbsp; screenshot captured
+        </div>
+        <div class="demo-pills">
+          <span class="demo-pill"><svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor" style="display:inline;vertical-align:middle;margin-right:2px"><path d="M4 0L4.8 3.2L8 4L4.8 4.8L4 8L3.2 4.8L0 4L3.2 3.2z"/></svg>AI-generated title</span>
+          <span class="demo-pill"><svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor" style="display:inline;vertical-align:middle;margin-right:2px"><path d="M4 0L4.8 3.2L8 4L4.8 4.8L4 8L3.2 4.8L0 4L3.2 3.2z"/></svg>AI-generated description</span>
+          <span class="demo-pill"><svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor" style="display:inline;vertical-align:middle;margin-right:2px"><path d="M4 0L4.8 3.2L8 4L4.8 4.8L4 8L3.2 4.8L0 4L3.2 3.2z"/></svg>voiceover script</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- HOW IT WORKS -->
+<section id="how-it-works">
+  <div class="section-inner">
+    <div class="section-label">How it works</div>
+    <h2>Three steps to a finished guide</h2>
+    <p class="section-sub">No manual writing. No copying screenshots one by one. Just record, enrich, and export.</p>
+    <div class="steps">
+      <div class="step-card">
+        <div class="step-num">1</div>
+        <h3>Record</h3>
+        <p>Click record and walk through your product normally. Guidr automatically captures each click as a step — screenshot, DOM context, and all.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-num">2</div>
+        <h3>Enrich</h3>
+        <p>Hit "Enrich all" and your chosen AI model generates a title, description, and voiceover script for every step — in seconds.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-num">3</div>
+        <h3>Edit &amp; Export</h3>
+        <p>Refine any step, add annotations or GIF clips, then export as Markdown, HTML, Intercom-ready HTML, or JSON.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="section-inner">
+    <div class="section-label">Features</div>
+    <h2>Everything you need, nothing you don't</h2>
+    <p class="section-sub">Built for customer success teams who need to ship guides fast, not fiddle with tooling.</p>
+    <div class="features">
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(88,166,255,0.12);color:#58a6ff;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 10l4.553-2.277A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14"/><rect x="2" y="8" width="13" height="8" rx="2"/></svg>
+        </div>
+        <h3>Click-to-record capture</h3>
+        <p>Every click becomes a chapter marker. Screenshots are compressed automatically to keep AI costs low.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(188,140,255,0.12);color:#bc8cff;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.5 3.5L17 8l-3.5 1.5L12 13l-1.5-3.5L7 8l3.5-1.5z"/><path d="M5 16l.75 1.75L7.5 18l-1.75.75L5 20.5l-.75-1.75L2.5 18l1.75-.75z"/><path d="M18.5 12.5l.5 1.25L20.25 14l-1.25.5L18.5 16l-.5-1.25L16.75 14l1.25-.5z"/></svg>
+        </div>
+        <h3>AI-generated content</h3>
+        <p>Step titles, descriptions, and voiceover scripts written for you. Inject your brand voice with tone guides and few-shot examples.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(63,185,80,0.12);color:#3fb950;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </div>
+        <h3>Annotations</h3>
+        <p>Draw circles, arrows, and highlights directly on screenshots. Mask sensitive information before publishing.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(255,200,80,0.12);color:#f0b429;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="17" y1="7" x2="22" y2="7"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="2" y1="17" x2="7" y2="17"/></svg>
+        </div>
+        <h3>Animated GIFs</h3>
+        <p>Trim a clip from your recording and generate a looping GIF for any step. Frame rate and quality are configurable.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(88,166,255,0.12);color:#58a6ff;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        </div>
+        <h3>Flexible export</h3>
+        <p>Markdown, self-contained HTML, Intercom-ready HTML, or raw JSON. Drop guides anywhere without reformatting.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(255,100,100,0.12);color:#f47067;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        </div>
+        <h3>Full script generation</h3>
+        <p>Stitch every step's voiceover into a single cohesive narration script — complete with intro, transitions, and outro.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- AI PROVIDERS -->
+<section>
+  <div class="section-inner">
+    <div class="section-label">AI Providers</div>
+    <h2>Your key, your model</h2>
+    <p class="section-sub">Guidr supports four providers. Connect your existing API key — Guidr never touches it.</p>
+    <div class="providers">
+      <div class="provider-badge">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#c96442"/></svg>
+        Anthropic Claude
+      </div>
+      <div class="provider-badge">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#10a37f"/></svg>
+        OpenAI GPT
+      </div>
+      <div class="provider-badge">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#4285f4"/></svg>
+        Google Gemini
+      </div>
+      <div class="provider-badge">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#6b48ff"/></svg>
+        OpenRouter
+      </div>
+    </div>
+    <p style="margin-top:1.5rem; font-size:0.85rem; color:var(--text-muted);">A typical guide costs a few cents. Costs vary by provider and model choice.</p>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- EXPORTS -->
+<section>
+  <div class="section-inner">
+    <div class="section-label">Export formats</div>
+    <h2>Paste it anywhere</h2>
+    <p class="section-sub">Self-contained exports work out of the box in every tool your team uses.</p>
+    <div class="exports">
+      <div class="export-card">
+        <h3>Markdown</h3>
+        <p>Base64-embedded screenshots. Works in GitHub, Notion, and any Markdown renderer.</p>
+      </div>
+      <div class="export-card">
+        <h3>HTML</h3>
+        <p>Single self-contained file. Email-safe and Notion-paste friendly.</p>
+      </div>
+      <div class="export-card">
+        <h3>Intercom HTML</h3>
+        <p>Paste directly into Intercom help center articles. No reformatting needed.</p>
+      </div>
+      <div class="export-card">
+        <h3>JSON</h3>
+        <p>Raw structured data for backups or feeding into your own publishing workflow.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- PRIVACY -->
+<section id="privacy">
+  <div class="section-inner">
+    <div class="section-label">Privacy</div>
+    <h2>Your data stays yours</h2>
+    <p class="section-sub">Guidr was designed so you never have to wonder where your recordings go.</p>
+    <div class="privacy-grid">
+      <div class="privacy-item">
+        <div class="privacy-check">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#3fb950" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6 L5 9 L10 3"/></svg>
+        </div>
+        <div>
+          <h4>Zero servers</h4>
+          <p>The developer sees none of your data. There is no Guidr backend.</p>
+        </div>
+      </div>
+      <div class="privacy-item">
+        <div class="privacy-check">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#3fb950" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6 L5 9 L10 3"/></svg>
+        </div>
+        <div>
+          <h4>Local-only storage</h4>
+          <p>Recordings and settings live in your browser (IndexedDB + chrome.storage).</p>
+        </div>
+      </div>
+      <div class="privacy-item">
+        <div class="privacy-check">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#3fb950" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6 L5 9 L10 3"/></svg>
+        </div>
+        <div>
+          <h4>Bring your own key</h4>
+          <p>Your API key goes directly from your browser to your chosen AI provider.</p>
+        </div>
+      </div>
+      <div class="privacy-item">
+        <div class="privacy-check">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#3fb950" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6 L5 9 L10 3"/></svg>
+        </div>
+        <div>
+          <h4>No telemetry</h4>
+          <p>No analytics, crash reports, or usage tracking of any kind.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <div class="section-label" style="margin-bottom:0.75rem;">Open source</div>
+  <h2>Ready to ship your first guide?</h2>
+  <p>Clone the repo, load it as an unpacked extension, and you're recording in under five minutes.</p>
+  <div style="display:flex; gap:1rem; justify-content:center; flex-wrap:wrap;">
+    <a class="btn btn-primary btn-lg" href="https://github.com/michaelfburke/guidr" target="_blank" rel="noopener">
+      <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      View on GitHub
+    </a>
+    <a class="btn btn-ghost btn-lg" href="https://github.com/michaelfburke/guidr#quick-start-load-unpacked" target="_blank" rel="noopener">Quick start guide</a>
+    <a class="btn btn-ghost btn-lg" style="color:#ff5e5b; border-color:#ff5e5b55;" href="https://ko-fi.com/michael2873" target="_blank" rel="noopener">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 010 8h-1"/><path d="M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+      Support on Ko-fi
+    </a>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <p>
+    Built by <a href="https://github.com/michaelfburke" target="_blank" rel="noopener">michaelfburke</a> ·
+    <a href="https://github.com/michaelfburke/guidr" target="_blank" rel="noopener">GitHub</a> ·
+    MIT License ·
+    <a href="https://ko-fi.com/michael2873" target="_blank" rel="noopener">Ko-fi</a>
+  </p>
+</footer>
+
+</body>
+</html>
