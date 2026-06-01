@@ -329,18 +329,28 @@ export function buildOpenAIContent(userText, screenshotDataUrl) {
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 const GEMINI_DEFAULT_MODEL = "gemini-2.5-flash";
 
+// Gemini 2.5 models think by default, and those thinking tokens are charged
+// against maxOutputTokens — so a small budget gets consumed reasoning and the
+// actual answer is truncated to a few words (or empty). We don't need
+// reasoning for short structured JSON, so disable it where the API allows.
+// 2.5 Pro can't fully disable thinking (min budget 128); everything else can.
+function geminiThinkingConfig(model) {
+  return /2\.5-pro/.test(model || "") ? { thinkingBudget: 128 } : { thinkingBudget: 0 };
+}
+
 async function callGemini(settings, system, userText, screenshotDataUrl) {
   const parts = buildGeminiParts(userText, screenshotDataUrl);
+  const model = settings.model || GEMINI_DEFAULT_MODEL;
   const body = {
     system_instruction: { parts: [{ text: system }] },
     contents: [{ role: "user", parts }],
     generationConfig: {
-      maxOutputTokens: 400,
+      maxOutputTokens: 1024,
       temperature: 0,
       responseMimeType: "application/json", // ← Gemini native structured output
+      thinkingConfig: geminiThinkingConfig(model),
     },
   };
-  const model = settings.model || GEMINI_DEFAULT_MODEL;
   const res = await fetch(`${GEMINI_BASE}/${model}:generateContent?key=${settings.apiKey}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -353,12 +363,16 @@ async function callGemini(settings, system, userText, screenshotDataUrl) {
 }
 
 async function callGeminiText(settings, system, userText) {
+  const model = settings.model || GEMINI_DEFAULT_MODEL;
   const body = {
     system_instruction: { parts: [{ text: system }] },
     contents: [{ role: "user", parts: [{ text: userText }] }],
-    generationConfig: { maxOutputTokens: 800, temperature: 0 },
+    generationConfig: {
+      maxOutputTokens: 2048,
+      temperature: 0,
+      thinkingConfig: geminiThinkingConfig(model),
+    },
   };
-  const model = settings.model || GEMINI_DEFAULT_MODEL;
   const res = await fetch(`${GEMINI_BASE}/${model}:generateContent?key=${settings.apiKey}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

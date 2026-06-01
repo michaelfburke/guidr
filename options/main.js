@@ -116,15 +116,19 @@ if (location.hash) {
 }
 
 // "Back to guides" — reopens the Guidr side panel (where the guide list lives).
-// Must run in response to a user gesture, which a click satisfies.
-document.getElementById("backToGuides")?.addEventListener("click", async (e) => {
+// chrome.sidePanel.open() must be called synchronously inside the user gesture;
+// awaiting windows.getCurrent() first would consume the gesture and the call
+// would be rejected. So we cache the window id up front and call open()
+// without awaiting anything beforehand.
+let currentWindowId = null;
+chrome.windows.getCurrent().then((w) => { currentWindowId = w?.id ?? null; }).catch(() => {});
+
+document.getElementById("backToGuides")?.addEventListener("click", (e) => {
   e.preventDefault();
-  try {
-    const win = await chrome.windows.getCurrent();
-    await chrome.sidePanel.open({ windowId: win.id });
-  } catch (err) {
+  const opts = currentWindowId != null ? { windowId: currentWindowId } : {};
+  Promise.resolve(chrome.sidePanel.open(opts)).catch((err) => {
     console.warn("[Guidr] Could not open side panel:", err);
-  }
+  });
 });
 
 // ── Provider cards ─────────────────────────────────────────────────────────
