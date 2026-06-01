@@ -2,6 +2,7 @@ import { exportSession } from "../export.js";
 import { db } from "../db.js";
 import { createAnnotator, renderAnnotated } from "../sidepanel/annotate.js";
 import { sw, escHtml, slugify, formatMs, formatBytes, formatApiError } from "../utils.js";
+import { makeReorderable } from "../sidepanel/reorder.js";
 
 // ── Read session ID from URL ───────────────────────────────────────────────
 const sessionId = new URL(location.href).searchParams.get("session");
@@ -161,6 +162,10 @@ function renderFilmstrip() {
     chip.className = `chip${i === currentStepIdx ? " active" : ""}${step.included === false ? " excluded" : ""}`;
     chip.dataset.idx = i;
     chip.dataset.id  = step.id;
+    chip.tabIndex = 0;
+    chip.setAttribute("role", "button");
+    const ariaLabel = step.title ? `Step ${i + 1}: ${step.title}` : `Step ${i + 1}`;
+    chip.setAttribute("aria-label", ariaLabel);
     const cached = thumbCache.get(step.id);
     const rawLabel = step.title || step.target?.text || step.target?.ariaLabel || step.pageTitle || "";
     const label = rawLabel.trim().slice(0, 32) || `Step ${i + 1}`;
@@ -171,13 +176,30 @@ function renderFilmstrip() {
         <span class="chip-time">${formatMs(step.tsMs)}</span>
       </div>
       <div class="chip-title">${escHtml(label)}</div>`;
-    chip.addEventListener("click", () => loadStepIntoEditor(i));
+    const activate = () => loadStepIntoEditor(i);
+    chip.addEventListener("click", activate);
+    chip.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activate(); }
+    });
     filmstrip.appendChild(chip);
   });
   // scroll active chip into view
   const active = filmstrip.querySelector(".chip.active");
   if (active) active.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
 }
+
+makeReorderable(filmstrip, {
+  getSteps: () => steps,
+  onReorder: async (reordered) => {
+    const activeId = steps[currentStepIdx]?.id;
+    steps = reordered;
+    currentStepIdx = Math.max(0, steps.findIndex((s) => s.id === activeId));
+    renderFilmstrip();
+    const active = filmstrip.querySelector(".chip.active");
+    if (active) active.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+    await sw({ type: "SP_REORDER_STEPS", sessionId, orderedIds: steps.map((s) => s.id) });
+  },
+});
 
 async function populateRailThumbnails() {
   if (!extractor.src) return;

@@ -3,6 +3,7 @@ import { db } from "../db.js";
 import { createAnnotator, renderAnnotated } from "./annotate.js";
 import { ICONS } from "./icons.js";
 import { sw, escHtml, slugify, timeAgo, formatMs, formatBytes, formatApiError, log } from "../utils.js";
+import { makeReorderable } from "./reorder.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -81,6 +82,7 @@ const gifSetEndBtn   = $("gifSetEndBtn");
 const gifRangeReadout = $("gifRangeReadout");
 const gifPreviewImg  = $("gifPreviewImg");
 const mediaPills     = document.querySelectorAll(".media-pill[data-mode]");
+const useFrameBtn    = $("useFrameBtn");
 
 // Cap auto-encoded GIFs at this width — full-HD recordings encoded at native
 // resolution produce 10–30MB GIFs that some renderers (Intercom in particular)
@@ -212,6 +214,14 @@ recBtn.addEventListener("click", async () => {
       voicePrepared = true;
     } else {
       showVoicePrepError(voicePrep);
+    }
+
+    // First-run hint: show a coach toast before the picker opens so the user
+    // knows to pick the tab or window they want to walk through.
+    const { pickerHintShown } = await chrome.storage.local.get(["pickerHintShown"]);
+    if (!pickerHintShown) {
+      toast("Pick the tab or window you want to walk through in the picker", 4000);
+      chrome.storage.local.set({ pickerHintShown: true });
     }
 
     let streamId;
@@ -560,6 +570,7 @@ function onStepEnriched(step) {
     loadStepFields(step);
   }
   renderChapterRail();
+  updateEnrichAllQuickBtn();
 }
 
 // ── Sessions list ──────────────────────────────────────────────────────────
@@ -848,6 +859,10 @@ function renderChapterRail() {
     chip.className = `chip${i === currentStepIdx ? " active" : ""}${step.included === false ? " excluded" : ""}`;
     chip.dataset.idx = i;
     chip.dataset.id = step.id;
+    chip.tabIndex = 0;
+    const label = step.title ? `Step ${i + 1}: ${step.title}` : `Step ${i + 1}`;
+    chip.setAttribute("aria-label", label);
+    chip.setAttribute("role", "button");
     const cached = thumbCache.get(step.id);
     chip.innerHTML = `
       <img class="chip-thumb" src="${cached || ""}" alt=""/>
@@ -855,13 +870,30 @@ function renderChapterRail() {
         <span class="chip-num">${i+1}</span>
         <span class="chip-time">${formatMs(step.tsMs)}</span>
       </div>`;
-    chip.addEventListener("click", () => {
-      currentStepIdx = i;
-      loadStepIntoEditor(i);
+    const activate = () => { currentStepIdx = i; loadStepIntoEditor(i); };
+    chip.addEventListener("click", activate);
+    chip.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activate(); }
     });
     chapterRail.appendChild(chip);
   });
+  updateEnrichAllQuickBtn();
 }
+
+makeReorderable(chapterRail, {
+  getSteps: () => steps,
+  onReorder: async (reordered) => {
+    // Find the current step in the new order so the editor stays on it.
+    const activeId = steps[currentStepIdx]?.id;
+    steps = reordered;
+    currentStepIdx = Math.max(0, steps.findIndex((s) => s.id === activeId));
+    renderChapterRail();
+    // Sync the active chip scroll position.
+    const active = chapterRail.querySelector(".chip.active");
+    if (active) active.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+    await sw({ type: "SP_REORDER_STEPS", sessionId: currentSessionId, orderedIds: steps.map((s) => s.id) });
+  },
+});
 
 // ── Step editor ────────────────────────────────────────────────────────────
 function loadStepIntoEditor(idx) {
@@ -935,7 +967,38 @@ function updateAnnotateButtonState(step) {
   openAnnotBtn.title = disabled
     ? "Annotations apply to screenshot steps only"
     : "";
+  // "Use current frame" only makes sense when there's a loaded video and the
+  // step is in screenshot mode — GIF mode uses gifStartMs/gifEndMs instead.
+  useFrameBtn.hidden = !(srcVideo.src && step.mediaMode === "screenshot");
 }
+
+useFrameBtn.addEventListener("click", async () => {
+  const step = steps[currentStepIdx];
+  if (!step || step.mediaMode !== "screenshot" || !srcVideo.src) return;
+
+  const newTsMs = Math.round(srcVideo.currentTime * 1000);
+  step.tsMs = newTsMs;
+  thumbCache.delete(step.id);
+  stepTs.textContent = formatMs(newTsMs);
+
+  // Re-extract the thumbnail so the chip and preview update immediately.
+  try {
+    const dataUrl = await extractFrame(newTsMs);
+    thumbCache.set(step.id, dataUrl);
+  } catch {}
+
+  renderChapterRail();
+  const updates = {
+    title: stepTitle.value.trim(),
+    body:  stepBody.value.trim(),
+    included: step.included !== false,
+    mediaMode: step.mediaMode,
+    annotations: step.annotations || [],
+    tsMs: newTsMs,
+  };
+  await sw({ type: "SP_UPDATE_STEP", stepId: step.id, updates });
+  toast("Screenshot frame updated");
+});
 
 mediaPills.forEach((p) => {
   p.addEventListener("click", () => {
@@ -1172,6 +1235,7 @@ async function saveCurrentStep() {
     gifStartMs: step.gifStartMs,
     gifEndMs:   step.gifEndMs,
     gifFps:     step.gifFps,
+    tsMs:       step.tsMs,
   };
   Object.assign(step, updates);
   await sw({ type: "SP_UPDATE_STEP", stepId: step.id, updates });
@@ -1266,22 +1330,26 @@ $("enrichOneBtn").addEventListener("click", async () => {
   const step = steps[currentStepIdx];
   if (!step) return;
   const btn = $("enrichOneBtn");
-  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Enriching…';
+  btn.disabled = true; btn.setAttribute("aria-busy", "true");
+  btn.innerHTML = '<span class="spin"></span> Enriching…';
   let screenshotDataUrl = null;
   try { screenshotDataUrl = await extractFrame(step.tsMs); } catch {}
   const res = await sw({ type: "SP_ENRICH_STEP", stepId: step.id, sessionId: currentSessionId, screenshotDataUrl });
-  btn.disabled = false; btn.textContent = "Enrich with AI";
+  btn.disabled = false; btn.removeAttribute("aria-busy"); btn.textContent = "Enrich with AI";
   if (res?.ok) { onStepEnriched(res.step); toast("Step enriched"); }
   else errorToast(formatApiError(res?.error));
 });
 
 let enrichAllRunning = false;
-$("enrichAllBtn").addEventListener("click", async () => {
+
+async function runEnrichAll() {
   if (enrichAllRunning) return;
-  stepMoreMenu.classList.remove("open");
+  stepMoreMenu?.classList.remove("open");
   const pending = steps.filter((s) => !s.enriched);
   if (!pending.length) { toast("All steps are already enriched"); return; }
   enrichAllRunning = true;
+  $("enrichAllBtn").setAttribute("aria-busy", "true");
+  updateEnrichAllQuickBtn();
   toast(`Enriching ${pending.length} step${pending.length === 1 ? "" : "s"}…`, 4000);
   let failed = null;
   for (const step of pending) {
@@ -1292,9 +1360,29 @@ $("enrichAllBtn").addEventListener("click", async () => {
     else if (!failed) failed = res?.error;
   }
   enrichAllRunning = false;
+  $("enrichAllBtn").removeAttribute("aria-busy");
+  updateEnrichAllQuickBtn();
   if (failed) errorToast(formatApiError(failed));
   else toast("All steps enriched");
-});
+}
+
+$("enrichAllBtn").addEventListener("click", runEnrichAll);
+$("enrichAllQuickBtn").addEventListener("click", runEnrichAll);
+
+function updateEnrichAllQuickBtn() {
+  const btn = $("enrichAllQuickBtn");
+  if (!btn) return;
+  const unenriched = steps.filter((s) => !s.enriched).length;
+  if (!unenriched || enrichAllRunning) {
+    btn.hidden = true;
+    return;
+  }
+  btn.hidden = false;
+  btn.disabled = false;
+  $("enrichAllQuickLabel").textContent = unenriched === steps.length
+    ? "Enrich all"
+    : `Enrich ${unenriched}`;
+}
 
 // ── Annotation editor ──────────────────────────────────────────────────────
 const annotPane    = $("annotPane");

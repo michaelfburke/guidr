@@ -4,8 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Guidr</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../fonts/fonts.css"/>
   <style>
     :root {
       --bg:      #09090e;
@@ -313,6 +312,7 @@
       padding: 6px 10px; overflow-x: auto;
       background: var(--s1); border-bottom: 1px solid var(--border);
       scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+      position: relative;
     }
     .chapter-rail::-webkit-scrollbar { height: 3px; }
     .chapter-rail::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 99px; }
@@ -350,6 +350,14 @@
     }
     .chip.active .chip-num { background: var(--accent); color: #fff; }
     .chip-time { font-family: var(--mono); font-size: 9px; }
+    .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .chip.dragging { opacity: 0.4; pointer-events: none; }
+    .reorder-indicator {
+      position: absolute; top: 0; bottom: 0; width: 3px;
+      background: var(--accent); border-radius: 2px;
+      pointer-events: none; z-index: 10;
+      transform: translateX(-50%);
+    }
 
     /* Annotation pane */
     .annot-pane {
@@ -583,6 +591,18 @@
       color: var(--text); text-align: center; line-height: 1.3;
     }
     .kbd + .kbd { margin-left: 3px; }
+
+    /* Enrich-all quick button in export bar */
+    .btn-enrich-all {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: var(--accentd); border: 1px solid var(--accent);
+      color: var(--text); border-radius: 8px; padding: 7px 12px;
+      font-family: var(--font); font-size: 12px; font-weight: 700;
+      cursor: pointer; transition: all 0.15s; white-space: nowrap; flex-shrink: 0;
+    }
+    .btn-enrich-all:hover { background: var(--accent); color: #fff; }
+    .btn-enrich-all:disabled { opacity: 0.4; cursor: default; }
+    .btn-enrich-all:disabled:hover { background: var(--accentd); color: var(--text); }
 
     /* Export bar */
     .export-bar {
@@ -841,6 +861,10 @@
     <div class="gen-row">
       <button class="gen-btn" id="enrichOneBtn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3m0 12v3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1M3 12h3m12 0h3M5.6 18.4l2.1-2.1m8.6-8.6 2.1-2.1"/></svg> Enrich with AI</button>
       <button class="gen-btn" id="openAnnotBtn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg> Annotate screenshot</button>
+      <button class="gen-btn secondary" id="useFrameBtn" type="button" title="Use the video's current playhead position as the screenshot for this step" hidden>
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 5 14 12 5 19" fill="currentColor"/><line x1="19" y1="4" x2="19" y2="20"/></svg>
+        Use current frame
+      </button>
     </div>
 
     <!-- GIF trim panel — visible only when this step's media is set to GIF. -->
@@ -923,6 +947,13 @@
 
   <!-- Export bar -->
   <div class="export-bar" id="exportBar">
+    <!-- Enrich-all shortcut: visible when ≥1 unenriched step exists. Shown here so
+         the CSM can batch-generate text in one click without hunting the overflow menu. -->
+    <button class="btn-enrich-all" id="enrichAllQuickBtn" type="button" hidden
+            title="Generate AI text for all unenriched steps">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px"><path d="M12 3v3m0 12v3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1M3 12h3m12 0h3M5.6 18.4l2.1-2.1m8.6-8.6 2.1-2.1"/></svg>
+      <span id="enrichAllQuickLabel">Enrich all</span>
+    </button>
     <button class="btn btn-export" id="exportBtn" type="button" aria-haspopup="menu" aria-expanded="false">
       Export this guide
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;margin-left:4px"><polyline points="6 9 12 15 18 9"/></svg>

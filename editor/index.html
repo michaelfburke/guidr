@@ -4,8 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Guidr Editor</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700\&family=JetBrains+Mono:wght@400;500\&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../fonts/fonts.css"/>
   <style>
     :root {
       --bg:      #09090e;
@@ -388,7 +387,7 @@
       display: flex; align-items: center; gap: 8px;
       padding: 8px 16px;
       background: var(--s1); border-top: 1px solid var(--border);
-      overflow-x: auto;
+      overflow-x: auto; position: relative;
       scrollbar-width: thin; scrollbar-color: var(--border2) transparent;
     }
     .filmstrip::-webkit-scrollbar { height: 3px; }
@@ -432,6 +431,14 @@
       background: var(--s2); line-height: 1.3; transition: color 0.13s;
     }
     .chip.active .chip-title, .chip:hover .chip-title { color: var(--text); }
+    .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .chip.dragging { opacity: 0.4; pointer-events: none; }
+    .reorder-indicator {
+      position: absolute; top: 0; bottom: 0; width: 3px;
+      background: var(--accent); border-radius: 2px;
+      pointer-events: none; z-index: 10;
+      transform: translateX(-50%);
+    }
 
     /* Spinner, toasts, modals */
     .spin {
