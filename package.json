@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "zip": "zip -r guidr-extension.zip manifest.json service_worker.js content_script.js db.js llm.js export.js utils.js sidepanel/ editor/ options/ offscreen/ fonts/ icons/ vendor/ && echo 'Packaged: guidr-extension.zip'"
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",
