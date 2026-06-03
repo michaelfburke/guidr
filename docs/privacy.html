@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy – Guidr</title>
+  <meta name="description" content="Guidr's privacy policy. No servers, no telemetry — your recordings and API key never leave your browser." />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d1117;
+      --bg-card: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #58a6ff;
+      --accent-glow: rgba(88, 166, 255, 0.15);
+      --accent-2: #3fb950;
+      --accent-3: #bc8cff;
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      font-size: 16px;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── NAV ── */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 2rem;
+      height: 60px;
+      background: rgba(13, 17, 23, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: var(--text);
+      text-decoration: none;
+    }
+
+    .nav-logo svg { flex-shrink: 0; }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover { color: var(--text); text-decoration: none; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.5rem 1.1rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.15s;
+      text-decoration: none;
+    }
+
+    .btn:hover { opacity: 0.85; transform: translateY(-1px); text-decoration: none; }
+    .btn:active { transform: translateY(0); }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #0d1117;
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-ghost:hover { background: var(--bg-card); }
+
+    /* ── CONTENT ── */
+    .page-header {
+      text-align: center;
+      padding: 5rem 2rem 3rem;
+      max-width: 720px;
+      margin: 0 auto;
+    }
+
+    .page-header .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: var(--accent-glow);
+      border: 1px solid rgba(88, 166, 255, 0.3);
+      color: var(--accent);
+      border-radius: 999px;
+      padding: 0.3rem 0.9rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      margin-bottom: 1.5rem;
+    }
+
+    .page-header h1 {
+      font-size: clamp(1.8rem, 4vw, 2.6rem);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.2;
+      margin-bottom: 0.75rem;
+    }
+
+    .page-header .subtitle {
+      color: var(--text-muted);
+      font-size: 1.1rem;
+    }
+
+    .content {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 0 2rem 6rem;
+    }
+
+    /* TL;DR card */
+    .tldr {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent-2);
+      border-radius: var(--radius);
+      padding: 1.5rem 1.75rem;
+      margin-bottom: 3rem;
+    }
+
+    .tldr-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent-2);
+      margin-bottom: 0.85rem;
+    }
+
+    .tldr ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .tldr li {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.6rem;
+      font-size: 0.95rem;
+      color: var(--text);
+    }
+
+    .tldr li::before {
+      content: '';
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent-2);
+      margin-top: 0.55em;
+      flex-shrink: 0;
+    }
+
+    /* Policy sections */
+    .policy-section {
+      margin-bottom: 2.75rem;
+    }
+
+    .policy-section h2 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin-bottom: 0.85rem;
+      padding-bottom: 0.6rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .policy-section p {
+      color: var(--text-muted);
+      margin-bottom: 0.85rem;
+      font-size: 0.97rem;
+    }
+
+    .policy-section p:last-child { margin-bottom: 0; }
+
+    .policy-section ul, .policy-section ol {
+      color: var(--text-muted);
+      padding-left: 1.5rem;
+      margin-bottom: 0.85rem;
+      font-size: 0.97rem;
+    }
+
+    .policy-section li { margin-bottom: 0.4rem; }
+
+    .policy-section strong { color: var(--text); }
+
+    .policy-section code {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.1em 0.45em;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 0.88em;
+      color: var(--accent-3);
+    }
+
+    /* Permission table */
+    .permission-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 0.85rem;
+      font-size: 0.93rem;
+    }
+
+    .permission-table th {
+      text-align: left;
+      padding: 0.6rem 0.85rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 600;
+    }
+
+    .permission-table td {
+      padding: 0.7rem 0.85rem;
+      border: 1px solid var(--border);
+      vertical-align: top;
+      color: var(--text-muted);
+    }
+
+    .permission-table td:first-child {
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 0.85em;
+      color: var(--accent-3);
+      white-space: nowrap;
+    }
+
+    .permission-table tr:nth-child(even) td { background: rgba(22,27,34,0.4); }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 2rem;
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    footer a { color: var(--text-muted); }
+    footer a:hover { color: var(--text); }
+
+    @media (max-width: 640px) {
+      .nav-links { display: none; }
+      .content { padding: 0 1.25rem 4rem; }
+      .page-header { padding: 3rem 1.25rem 2rem; }
+      .permission-table { font-size: 0.85rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a class="nav-logo" href="index.html">
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="22" height="22" rx="5" fill="#7c6af7"/>
+      <rect x="4" y="4" width="14" height="3" fill="white"/>
+      <rect x="4" y="4" width="3" height="14" fill="white"/>
+      <rect x="4" y="15" width="14" height="3" fill="white"/>
+      <rect x="11" y="10" width="7" height="3" fill="white"/>
+    </svg>
+    Guidr
+  </a>
+  <ul class="nav-links">
+    <li><a href="index.html#how-it-works">How it works</a></li>
+    <li><a href="index.html#features">Features</a></li>
+    <li><a href="privacy.html" style="color: var(--text);">Privacy</a></li>
+    <li>
+      <!-- TODO: Replace href with Chrome Web Store URL after publication -->
+      <a class="btn btn-primary" href="#" target="_blank" rel="noopener">
+        Add to Chrome
+      </a>
+    </li>
+    <li>
+      <a class="btn btn-ghost" style="color:#ff5e5b; border-color:#ff5e5b33;" href="https://ko-fi.com/michael2873" target="_blank" rel="noopener">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 010 8h-1"/><path d="M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+        Support
+      </a>
+    </li>
+  </ul>
+</nav>
+
+<!-- PAGE HEADER -->
+<div class="page-header">
+  <div class="badge">Last updated: 26 May 2026</div>
+  <h1>Privacy Policy</h1>
+  <p class="subtitle">Guidr has no servers. The developer never sees your data.</p>
+</div>
+
+<!-- CONTENT -->
+<div class="content">
+
+  <!-- TL;DR -->
+  <div class="tldr">
+    <div class="tldr-title">TL;DR</div>
+    <ul>
+      <li>Guidr has no server. The developer never sees your data.</li>
+      <li>Recordings live only in your browser, in extension-sandboxed storage.</li>
+      <li>When you click <strong>Enrich</strong>, the captured step is sent to the AI provider you selected, using your own API key.</li>
+      <li>Your API key is stored locally and only ever sent to that provider.</li>
+      <li>Uninstalling the extension or clearing its storage deletes everything.</li>
+    </ul>
+  </div>
+
+  <!-- What Guidr captures -->
+  <div class="policy-section">
+    <h2>What Guidr captures</h2>
+    <p>While you are actively recording a guide, and only then, Guidr captures:</p>
+    <ul>
+      <li>Screenshots of the active browser tab (before and after each click).</li>
+      <li>The element you clicked: CSS selector, visible text, ARIA label, role, and bounding rectangle.</li>
+      <li>The page URL and document title at the moment of the click.</li>
+      <li>The viewport dimensions and device pixel ratio (needed to render the guide).</li>
+    </ul>
+    <p>Guidr does <strong>not</strong> capture: keystrokes, form values, clipboard contents, cookies, browser history outside the recording session, or anything from tabs other than the one you are recording.</p>
+  </div>
+
+  <!-- What Guidr stores -->
+  <div class="policy-section">
+    <h2>What Guidr stores, and where</h2>
+    <ul>
+      <li><strong>API key, model selection, tone-of-voice settings, and example guides:</strong> <code>chrome.storage.local</code> (sandboxed per-extension, never synced).</li>
+      <li><strong>Session metadata</strong> (guide titles, step lists): <code>chrome.storage.local</code>.</li>
+      <li><strong>Steps, screenshots, and recordings:</strong> IndexedDB inside the extension, in your browser.</li>
+    </ul>
+    <p>All of the above stays on your machine. Guidr operates no server and the developer receives no telemetry, analytics, crash reports, or recordings.</p>
+  </div>
+
+  <!-- What gets sent to third parties -->
+  <div class="policy-section">
+    <h2>What gets sent to third parties</h2>
+    <p>When you click <strong>Enrich</strong> on a step or <strong>Generate script</strong> for a guide, Guidr sends the following to the AI provider you configured in Settings:</p>
+    <ul>
+      <li>The step screenshot(s).</li>
+      <li>The DOM metadata for the clicked element.</li>
+      <li>The page URL and title.</li>
+      <li>Your tone-of-voice guide and any example guides, if you provided them.</li>
+      <li>Your API key, in the request's Authorization header.</li>
+    </ul>
+    <p>The destination depends on your provider selection:</p>
+    <ul>
+      <li>Anthropic — <code>https://api.anthropic.com</code></li>
+      <li>OpenAI — <code>https://api.openai.com</code></li>
+      <li>Google Gemini — <code>https://generativelanguage.googleapis.com</code></li>
+      <li>OpenRouter — <code>https://openrouter.ai</code></li>
+    </ul>
+    <p>These requests are made directly from your browser to the provider. Guidr does not proxy or observe them. The provider's own privacy and data-retention policies apply to anything you send.</p>
+    <p>Guidr does not contact any other network endpoint. It does not load remote code.</p>
+  </div>
+
+  <!-- Permissions -->
+  <div class="policy-section">
+    <h2>Permissions, and why</h2>
+    <p>Guidr requests the following browser permissions:</p>
+    <table class="permission-table">
+      <thead>
+        <tr>
+          <th>Permission</th>
+          <th>Why it's needed</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>activeTab</td>
+          <td>To inject the recording script and capture screenshots of the tab you choose to record.</td>
+        </tr>
+        <tr>
+          <td>scripting</td>
+          <td>To inject the content script that tracks your clicks and captures element metadata during a recording session.</td>
+        </tr>
+        <tr>
+          <td>tabs</td>
+          <td>To read the URL and title of the active tab so each step can be annotated with page context.</td>
+        </tr>
+        <tr>
+          <td>storage</td>
+          <td>To save your API key, model preference, tone guide, and session metadata locally in your browser.</td>
+        </tr>
+        <tr>
+          <td>sidePanel</td>
+          <td>Guidr's entire UI lives in the Chrome side panel — this permission is required to open it.</td>
+        </tr>
+        <tr>
+          <td>downloads</td>
+          <td>To save exported guides (Markdown, HTML, JSON) to your disk when you click Export.</td>
+        </tr>
+        <tr>
+          <td>desktopCapture</td>
+          <td>To record your screen during a walkthrough. Chrome requires this permission to start a screen capture stream.</td>
+        </tr>
+        <tr>
+          <td>offscreen</td>
+          <td>Chrome side panels cannot request microphone access directly. An offscreen document is required to capture voice narration.</td>
+        </tr>
+        <tr>
+          <td>host_permissions<br/><code>&lt;all_urls&gt;</code> (optional)</td>
+          <td>Requested the first time you record so that screenshot capture continues to work after page navigations within a session. You can revoke this at any time from <code>chrome://extensions</code> → Guidr → Site access.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Your controls -->
+  <div class="policy-section">
+    <h2>Your controls</h2>
+    <ul>
+      <li>Delete an individual guide or step from the side panel at any time.</li>
+      <li>Clear all Guidr data: <code>chrome://extensions</code> → Guidr → Remove, or use the "Clear all data" button in Settings.</li>
+      <li>Revoke the all-sites permission at any time from <code>chrome://extensions</code> → Guidr → Site access.</li>
+      <li>Use a different API key, or no key — without one, no data leaves your browser.</li>
+    </ul>
+  </div>
+
+  <!-- Children -->
+  <div class="policy-section">
+    <h2>Children</h2>
+    <p>Guidr is not directed at children under 13 and the developer does not knowingly collect data from them. (Guidr does not collect data from anyone.)</p>
+  </div>
+
+  <!-- Changes -->
+  <div class="policy-section">
+    <h2>Changes to this policy</h2>
+    <p>If the data Guidr handles ever changes, this document will be updated and the "Last updated" date above will move forward. Material changes will also be noted in the extension's release notes.</p>
+  </div>
+
+  <!-- Contact -->
+  <div class="policy-section">
+    <h2>Contact</h2>
+    <p>Questions about this policy? Reach out via the <a href="https://chromewebstore.google.com" target="_blank" rel="noopener">Chrome Web Store</a> support tab, or open an issue on GitHub.</p>
+  </div>
+
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <p>
+    Built by <a href="https://github.com/michaelfburke" target="_blank" rel="noopener">michaelfburke</a> ·
+    <a href="index.html">Home</a> ·
+    MIT License ·
+    <a href="https://ko-fi.com/michael2873" target="_blank" rel="noopener">Ko-fi</a>
+  </p>
+</footer>
+
+</body>
+</html>

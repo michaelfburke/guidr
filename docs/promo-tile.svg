@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="440" height="280" viewBox="0 0 440 280">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="440" y2="280" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#161b22"/>
+      <stop offset="100%" stop-color="#0d1117"/>
+    </linearGradient>
+    <linearGradient id="title-grad" x1="0" y1="0" x2="160" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#7c6af7"/>
+      <stop offset="100%" stop-color="#58a6ff"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="440" height="280" fill="url(#bg)"/>
+
+  <!-- Decorative glow blobs -->
+  <circle cx="390" cy="-30" r="130" fill="#7c6af7" opacity="0.06"/>
+  <circle cx="420" cy="60" r="90" fill="#58a6ff" opacity="0.04"/>
+  <circle cx="50" cy="260" r="80" fill="#3fb950" opacity="0.03"/>
+
+  <!-- Logo icon -->
+  <rect x="40" y="38" width="44" height="44" rx="10" fill="#7c6af7"/>
+  <rect x="50" y="48" width="28" height="6" fill="white"/>
+  <rect x="50" y="48" width="6" height="28" fill="white"/>
+  <rect x="50" y="70" width="28" height="6" fill="white"/>
+  <rect x="63" y="60" width="15" height="6" fill="white"/>
+
+  <!-- Wordmark -->
+  <text x="96" y="72" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif" font-size="30" font-weight="800" fill="url(#title-grad)" letter-spacing="-0.5">Guidr</text>
+
+  <!-- Subtitle -->
+  <text x="40" y="102" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif" font-size="13.5" fill="#8b949e" letter-spacing="0.2">AI Guide Maker for Chrome</text>
+
+  <!-- Divider -->
+  <line x1="40" y1="122" x2="400" y2="122" stroke="#30363d" stroke-width="1"/>
+
+  <!-- Step 1 card -->
+  <rect x="40" y="140" width="108" height="84" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+  <text x="94" y="164" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif" font-size="9.5" fill="#8b949e" text-anchor="middle" font-weight="600" letter-spacing="0.06em">STEP 1</text>
+  <!-- Record icon -->
+  <circle cx="94" cy="183" r="8" fill="none" stroke="#ff5f57" stroke-width="1.5"/>
+  <circle cx="94" cy="183" r="4" fill="#ff5f57"/>
+  <text x="94" y="208" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif" font-size="12" font-weight="700" fill="#e6edf3" text-anchor="middle">Record</text>
+  <text x="94" y="220" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif" font-size="10" fill="#58a6ff" text-anchor="middle">click through</text>
+
+  <!-- Arrow 1 -->
+  <path d="M155 182 L165 182 M161 177 L166 182 L161 187" stroke="#30363d" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+  <!-- Step 2 card -->
+  <rect x="166" y="140" width="108" height="84" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+  <text x="220" y="164" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif" font-size="9.5" fill="#8b949e" text-anchor="middle" font-weight="600" letter-spacing="0.06em">STEP 2</text>
+  <!-- Sparkle icon -->
+  <text x="220" y="189" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif" font-size="16" text-anchor="middle" fill="#bc8cff">✦</text>
+  <text x="220" y="208" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif" font-size="12" font-weight="700" fill="#e6edf3" text-anchor="middle">Enrich</text>
+  <text x="220" y="220" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif" font-size="10" fill="#bc8cff" text-anchor="middle">AI-powered</text>
+
+  <!-- Arrow 2 -->
+  <path d="M281 182 L291 182 M287 177 L292 182 L287 187" stroke="#30363d" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+  <!-- Step 3 card -->
+  <rect x="292" y="140" width="108" height="84" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+  <text x="346" y="164" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif" font-size="9.5" fill="#8b949e" text-anchor="middle" font-weight="600" letter-spacing="0.06em">STEP 3</text>
+  <!-- Export icon -->
+  <rect x="336" y="172" width="20" height="16" rx="2" fill="none" stroke="#3fb950" stroke-width="1.5"/>
+  <path d="M346 172 L346 164 M342 168 L346 164 L350 168" stroke="#3fb950" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="346" y="208" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif" font-size="12" font-weight="700" fill="#e6edf3" text-anchor="middle">Export</text>
+  <text x="346" y="220" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif" font-size="10" fill="#3fb950" text-anchor="middle">share anywhere</text>
+
+  <!-- Bottom strip -->
+  <line x1="40" y1="242" x2="400" y2="242" stroke="#30363d" stroke-width="1"/>
+
+  <!-- Format tags -->
+  <text x="40" y="261" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif" font-size="10.5" fill="#8b949e">Markdown · HTML · Intercom · JSON</text>
+
+  <!-- Brand mark -->
+  <rect x="370" y="248" width="30" height="16" rx="4" fill="#7c6af7" opacity="0.15"/>
+  <text x="385" y="260" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif" font-size="10" fill="#7c6af7" text-anchor="middle" font-weight="700">guidr</text>
+</svg>

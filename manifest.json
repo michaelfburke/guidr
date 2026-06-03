@@ -2,9 +2,9 @@
   "manifest_version": 3,
   "name": "Guidr – AI Guide Maker",
   "version": "0.1.0",
-  "description": "Click through any SaaS product and generate polished step-by-step guides with AI.",
+  "description": "Record your screen, let AI write the guide. Privacy-first, zero servers, bring your own API key.",
   "author": "Michael Burke",
-  "homepage_url": "https://github.com/michaelfburke/guidr",
+  "homepage_url": "https://michaelfburke.github.io/guidr",
 
   "permissions": [
     "activeTab",
