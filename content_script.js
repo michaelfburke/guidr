@@ -148,10 +148,35 @@
     };
   }
 
+  // A <label>'s own words, minus any field nested inside it (a wrapped
+  // <select> would otherwise contribute every option).
+  function labelText(label) {
+    const copy = label.cloneNode(true);
+    copy.querySelectorAll("input, select, textarea").forEach((n) => n.remove());
+    return copy.textContent;
+  }
+
+  const clip = (s) => String(s || "").replace(/\s+/g, " ").trim().slice(0, 120);
+
   function getVisibleText(el) {
     const label = el.getAttribute("aria-label") || el.getAttribute("title");
-    if (label) return label.trim().slice(0, 120);
-    return (el.innerText || el.textContent || "").trim().slice(0, 120);
+    if (label) return clip(label);
+    const labelledBy = el.getAttribute("aria-labelledby");
+    if (labelledBy) {
+      const text = labelledBy.split(/\s+/).map((id) => document.getElementById(id)?.innerText || "").join(" ");
+      if (clip(text)) return clip(text);
+    }
+    const tag = el.tagName.toLowerCase();
+    if (tag === "input" && BUTTON_INPUT_TYPES.includes((el.type || "").toLowerCase())) {
+      return clip(el.value); // a button's caption, not user data
+    }
+    if (tag === "input" || tag === "textarea" || tag === "select") {
+      // Describe a field by what labels it. Never read its value: that's
+      // what the user typed, and a select's text is every option.
+      const fromLabels = [...(el.labels || [])].map(labelText).join(" ");
+      return clip(fromLabels || el.placeholder || el.name);
+    }
+    return clip(el.innerText || el.textContent);
   }
 
   function inferRole(el) {

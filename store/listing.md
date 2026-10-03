@@ -36,10 +36,10 @@ Keep in sync with `manifest.json`, `PRIVACY.md`, and the README.
 >
 > Free and open source (MIT): https://github.com/michaelfburke/guidr
 
-**Graphic assets** (still to produce):
-- Icon 128×128: 96×96 artwork, 16px transparent padding on each side
-- Screenshots 1280×800 (3–5): recording in progress · editor with an enriched step · annotation tools · export menu · settings with provider picker
-- Small promo tile 440×280
+**Graphic assets:**
+- [x] Icon 128×128 (`icons/icon128.png`): 96×96 artwork, 16px transparent padding
+- [ ] Screenshots 1280×800 (3–5): recording in progress · editor with an enriched step · annotation tools · export menu · settings with provider picker
+- [ ] Small promo tile 440×280
 
 **Homepage URL:** https://michaelfburke.github.io/guidr/ (GitHub Pages, `docs/`)
 **Support URL:** https://github.com/michaelfburke/guidr/issues
@@ -84,7 +84,7 @@ Keep in sync with `manifest.json`, `PRIVACY.md`, and the README.
 
 ## Before you submit
 
-- [ ] Real-browser run: first recording on a fresh profile shows the site-access prompt, and steps are captured
-- [ ] Icon padded; screenshots and promo tile made
+- [ ] Load the packaged zip unpacked in your own Chrome, on a fresh profile: the first Record click should show the site-access prompt *before* the mic prompt and screen picker, and steps should be captured. (Automated Chromium run of record → steps → SW restart → stop → editor → enrich passes, but it pre-grants site access, so it can't see that prompt.)
+- [ ] Screenshots and promo tile made
 - [ ] Version bumped in both `manifest.json` and `package.json`; `npm run package`; upload `dist/guidr-<version>.zip`
 - [ ] Privacy policy URL loads (homepage confirmed live)
