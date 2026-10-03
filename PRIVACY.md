@@ -103,7 +103,7 @@ Guidr contacts no other network endpoint and does not load remote code.
 - `desktopCapture` — to record the tab, window, or screen you choose.
 - `offscreen` — to host microphone capture for narration (Chrome side panels
   cannot show the microphone permission prompt themselves).
-- `activeTab`, `tabs`, `scripting` — to inject the click-detail logic into
+- `activeTab`, `scripting` — to inject the click-detail logic into
   the tab you are recording, and re-inject it after the tab navigates.
 - `storage` — to remember your settings and guide list.
 - `sidePanel` — Guidr's UI is a side panel.
