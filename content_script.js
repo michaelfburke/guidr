@@ -49,15 +49,26 @@
     document.removeEventListener("keydown", handleKeyNav, true);
   }
 
-  // Keyboard activation of a button/link (Enter, or Space on keyup) makes the
-  // browser dispatch a synthetic click (event.detail === 0) right after our
-  // keydown marker. Swallow that echo so one action yields one step.
-  const KEY_ECHO_WINDOW_MS = 1000;
-  let lastKeyMarkerTs = 0;
+  // Keyboard activation of a control makes the browser dispatch a synthetic
+  // click (event.detail === 0) right after our keydown marker — on keydown for
+  // Enter, on keyup for Space, and on the form's submit button for Enter in a
+  // text field. Remember what the key acted on and swallow that one echo, so
+  // one action yields one step.
+  const KEY_ECHO_MAX_MS = 10_000;
+  let pendingKeyEcho = null; // { el, form, ts }
 
   function handleClick(e) {
-    if (e.detail === 0 && Date.now() - lastKeyMarkerTs < KEY_ECHO_WINDOW_MS) return;
+    if (e.detail === 0 && isKeyEcho(e.target)) {
+      pendingKeyEcho = null;
+      return;
+    }
     emitMarker(e.target);
+  }
+
+  function isKeyEcho(target) {
+    if (!pendingKeyEcho || Date.now() - pendingKeyEcho.ts > KEY_ECHO_MAX_MS) return false;
+    const { el, form } = pendingKeyEcho;
+    return el === target || el.contains(target) || (!!form && target.form === form);
   }
 
   function emitMarker(el) {
@@ -72,28 +83,37 @@
     }).catch(() => {});
   }
 
-  const NON_TEXT_INPUT_TYPES = ["button", "submit", "reset", "checkbox", "radio", "file", "image", "color", "range"];
+  const BUTTON_INPUT_TYPES = ["button", "submit", "reset", "image"];
+  const TOGGLE_INPUT_TYPES = ["checkbox", "radio"];
+  const NON_TEXT_INPUT_TYPES = [...BUTTON_INPUT_TYPES, ...TOGGLE_INPUT_TYPES, "file", "color", "range", "hidden"];
+  const ENTER_ROLES = ["button", "link", "menuitem", "menuitemcheckbox", "menuitemradio", "tab", "option", "treeitem"];
+  const SPACE_ROLES = ["button", "checkbox", "radio", "switch", "menuitem", "menuitemcheckbox", "menuitemradio", "tab", "option"];
 
-  function isTextEntry(el) {
+  // Does pressing `key` on `el` perform an action worth a step? Mirrors which
+  // keys activate which controls, so e.g. Space on a link (scrolls) or Enter
+  // on a checkbox (does nothing) doesn't create a phantom step.
+  function keyActivates(el, key) {
     const tag = el.tagName.toLowerCase();
-    if (tag === "textarea" || el.isContentEditable) return true;
-    return tag === "input" && !NON_TEXT_INPUT_TYPES.includes((el.type || "text").toLowerCase());
+    const type = (el.type || "").toLowerCase();
+    const role = el.getAttribute("role");
+    if (tag === "textarea" || tag === "select" || el.isContentEditable) return false;
+    if (key === "Enter") {
+      if (tag === "button" || (tag === "a" && el.hasAttribute("href"))) return true;
+      if (tag === "input") return BUTTON_INPUT_TYPES.includes(type) || !NON_TEXT_INPUT_TYPES.includes(type); // implicit submit
+      return ENTER_ROLES.includes(role);
+    }
+    // Space
+    if (tag === "button") return true;
+    if (tag === "input") return BUTTON_INPUT_TYPES.includes(type) || TOGGLE_INPUT_TYPES.includes(type);
+    if (tag === "a") return false;
+    return SPACE_ROLES.includes(role);
   }
 
   function handleKeyNav(e) {
     if (!["Enter", " "].includes(e.key) || e.repeat) return;
     const el = document.activeElement;
-    if (!el || el === document.body) return;
-    // Typing a space, or a newline in a multi-line field, isn't a step.
-    // Enter in a single-line input is (it usually submits).
-    if (isTextEntry(el) && (e.key === " " || el.tagName.toLowerCase() !== "input")) return;
-    const tag = el.tagName.toLowerCase();
-    const role = el.getAttribute("role");
-    const isInteractive =
-      ["button", "a", "input", "select"].includes(tag) ||
-      ["button", "link", "menuitem", "tab", "option", "checkbox", "radio", "switch"].includes(role);
-    if (!isInteractive) return;
-    lastKeyMarkerTs = Date.now();
+    if (!el || el === document.body || !keyActivates(el, e.key)) return;
+    pendingKeyEcho = { el, form: el.form || null, ts: Date.now() };
     emitMarker(el);
   }
 

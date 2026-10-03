@@ -33,8 +33,8 @@ chrome.action.onClicked.addListener((tab) => {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const handlers = {
-    SP_START_RECORDING:    () => handleStartRecording(msg, sendResponse),
-    SP_STOP_RECORDING:     () => handleStopRecording(sendResponse),
+    SP_START_RECORDING:    () => handleStartRecording(msg, sender, sendResponse),
+    SP_STOP_RECORDING:     () => handleStopRecording(sender, sendResponse),
     GUIDR_CHAPTER_MARKER:  () => handleChapterMarker(msg, sender, sendResponse),
     SP_ENRICH_STEP:        () => handleEnrichStep(msg, sendResponse),
     SP_GET_SESSIONS:       () => handleGetSessions(sendResponse),
@@ -62,55 +62,83 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 // ─── Recording session state ────────────────────────────────────────────────
 
-// activeSession: { id, tabId, name, startedAt, steps: [] }
+// activeSession: { id, tabId, name, startedAt, ownerDocumentId, steps: [] }
 // startedAt is the wall-clock moment the side panel started MediaRecorder —
-// chapter markers are measured relative to it.
+// chapter markers are measured relative to it. ownerDocumentId is the side
+// panel document that started the recording; only it may stop it.
 //
 // Chrome terminates an idle service worker after ~30s, which would wipe this
-// in-memory copy mid-recording. It is mirrored to chrome.storage.session
-// (in-memory, cleared on browser restart) and restored on the next wake-up.
-// Every handler that reads activeSession must `await restoreActiveSession()`
-// first.
+// in-memory copy mid-recording. The session's metadata (not its steps, which
+// are already in IndexedDB) is mirrored to chrome.storage.session (in-memory,
+// cleared on browser restart) and the steps are reloaded from IndexedDB on the
+// next wake-up. Every handler that reads activeSession must
+// `await restoreActiveSession()` first.
 const ACTIVE_SESSION_KEY = "guidr_activeSession";
 let activeSession = null;
 let restorePromise = null;
 
 function restoreActiveSession() {
-  restorePromise ??= chrome.storage.session
-    .get(ACTIVE_SESSION_KEY)
-    .then((res) => { activeSession ??= res[ACTIVE_SESSION_KEY] || null; })
-    .catch(() => {});
+  restorePromise ??= (async () => {
+    try {
+      const { [ACTIVE_SESSION_KEY]: meta } = await chrome.storage.session.get(ACTIVE_SESSION_KEY);
+      if (!meta || activeSession) return;
+      const steps = await db.getStepsForSession(meta.id);
+      activeSession ??= { ...meta, steps: steps.sort((a, b) => a.index - b.index) };
+    } catch (err) {
+      console.warn("[Guidr] could not restore recording state:", err);
+    }
+  })();
   return restorePromise;
 }
 
 async function setActiveSession(session) {
   activeSession = session;
-  await persistActiveSession();
-}
-
-async function persistActiveSession() {
   try {
-    if (activeSession) await chrome.storage.session.set({ [ACTIVE_SESSION_KEY]: activeSession });
-    else await chrome.storage.session.remove(ACTIVE_SESSION_KEY);
+    if (session) {
+      const { steps: _steps, ...meta } = session;
+      await chrome.storage.session.set({ [ACTIVE_SESSION_KEY]: meta });
+    } else {
+      await chrome.storage.session.remove(ACTIVE_SESSION_KEY);
+    }
   } catch (err) {
     console.warn("[Guidr] could not persist recording state:", err);
   }
 }
 
-async function handleStartRecording({ sessionName, tabId, startedAt }, sendResponse) {
-  await restoreActiveSession();
-  if (activeSession) {
-    // The side panel never starts a second recording while its own is live,
-    // so a leftover session means the panel that owned it went away without
-    // stopping (closed mid-recording). Detach it rather than blocking new
-    // recordings until the browser restarts.
-    const stale = activeSession;
-    await setActiveSession(null);
-    await chrome.tabs.sendMessage(stale.tabId, { type: "GUIDR_STOP_RECORDING" }).catch(() => {});
+// A session whose owning side panel has closed can never be stopped by it.
+async function isOwnerAlive(session) {
+  if (!session.ownerDocumentId) return true;
+  try {
+    const contexts = await chrome.runtime.getContexts({ documentIds: [session.ownerDocumentId] });
+    return contexts.length > 0;
+  } catch {
+    return true;
   }
+}
+
+async function handleStartRecording({ sessionName, tabId, startedAt }, sender, sendResponse) {
   if (!tabId || !startedAt) {
     sendResponse({ ok: false, error: "Missing recording context — restart the side panel and try again" });
     return;
+  }
+
+  await restoreActiveSession();
+  if (activeSession) {
+    if (await isOwnerAlive(activeSession)) {
+      const elsewhere = activeSession.ownerDocumentId && activeSession.ownerDocumentId !== sender.documentId;
+      sendResponse({
+        ok: false,
+        error: elsewhere
+          ? "Guidr is already recording in another window — stop that recording first"
+          : "Already recording — stop the current session first",
+      });
+      return;
+    }
+    // The side panel that owned it closed mid-recording without stopping.
+    // Detach it rather than blocking new recordings until the browser restarts.
+    const stale = activeSession;
+    await setActiveSession(null);
+    await chrome.tabs.sendMessage(stale.tabId, { type: "GUIDR_STOP_RECORDING" }).catch(() => {});
   }
 
   // No API key check here: recording is fully local. The key is only needed
@@ -123,6 +151,7 @@ async function handleStartRecording({ sessionName, tabId, startedAt }, sendRespo
     tabId,
     name: uniqueName,
     startedAt,
+    ownerDocumentId: sender.documentId || null,
     steps: [],
   });
 
@@ -140,27 +169,33 @@ async function handleStartRecording({ sessionName, tabId, startedAt }, sendRespo
   sendResponse({ ok: true, sessionId, markersActive });
 }
 
-async function handleStopRecording(sendResponse) {
+async function handleStopRecording(sender, sendResponse) {
   await restoreActiveSession();
   if (!activeSession) { sendResponse({ ok: false, error: "No active session" }); return; }
+  const owner = activeSession.ownerDocumentId;
+  if (owner && sender.documentId && owner !== sender.documentId) {
+    sendResponse({ ok: false, error: "This recording belongs to another window" });
+    return;
+  }
 
-  await chrome.tabs.sendMessage(activeSession.tabId, { type: "GUIDR_STOP_RECORDING" }).catch(() => {});
-
-  const session = { ...activeSession };
+  const session = activeSession;
   await setActiveSession(null);
-  sendResponse({ ok: true, session });
+  await chrome.tabs.sendMessage(session.tabId, { type: "GUIDR_STOP_RECORDING" }).catch(() => {});
+  sendResponse({ ok: true, session: { ...session } });
 }
 
 async function handleChapterMarker({ payload }, sender, sendResponse) {
   await restoreActiveSession();
-  if (!activeSession) { sendResponse({ ok: false }); return; }
-  if (sender.tab?.id !== activeSession.tabId) { sendResponse({ ok: false }); return; }
+  // Hold a local reference: Stop can clear activeSession while we await below.
+  const session = activeSession;
+  if (!session) { sendResponse({ ok: false }); return; }
+  if (sender.tab?.id !== session.tabId) { sendResponse({ ok: false }); return; }
 
-  const tsMs = Math.max(0, (payload.absTs || Date.now()) - activeSession.startedAt);
+  const tsMs = Math.max(0, (payload.absTs || Date.now()) - session.startedAt);
   const step = {
     id: `step_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-    sessionId: activeSession.id,
-    index: activeSession.steps.length,
+    sessionId: session.id,
+    index: session.steps.length,
     tsMs,
     target: payload.target,
     url: payload.url,
@@ -174,10 +209,9 @@ async function handleChapterMarker({ payload }, sender, sendResponse) {
     enriched: false,
   };
 
-  activeSession.steps.push(step);
-  await persistActiveSession();
+  session.steps.push(step);
   await db.saveStep(step);
-  await db.saveSession(activeSession);
+  await db.saveSession(session);
 
   chrome.runtime.sendMessage({
     type: "SW_STEP_CAPTURED",
@@ -238,10 +272,7 @@ async function handleEnrichStep({ stepId, sessionId, screenshotDataUrl }, sendRe
     await restoreActiveSession();
     if (activeSession?.id === sessionId) {
       const idx = activeSession.steps.findIndex((s) => s.id === stepId);
-      if (idx !== -1) {
-        activeSession.steps[idx] = updated;
-        await persistActiveSession();
-      }
+      if (idx !== -1) activeSession.steps[idx] = updated;
     }
 
     sendResponse({ ok: true, step: updated });

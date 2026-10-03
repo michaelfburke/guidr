@@ -28,7 +28,9 @@ beforeEach(() => {
     <a href="#x">Docs</a>
     <input type="text" name="q"/>
     <input type="checkbox"/>
-    <textarea></textarea>`;
+    <textarea></textarea>
+    <select><option>One</option></select>
+    <form><input type="text" name="email"/><button type="button">Go</button></form>`;
   sendMessage = vi.fn(() => Promise.resolve());
   chrome.runtime.sendMessage = sendMessage;
   chrome.runtime.onMessage.addListener = (fn) => { onMessage = fn; };
@@ -63,13 +65,6 @@ describe("content_script chapter markers", () => {
     expect(markers()).toHaveLength(1);
   });
 
-  it("swallows the implicit-submit click after Enter in a text input", () => {
-    key(document.querySelector("input[type=text]"), "Enter");
-    click(document.querySelector("button"), 0);
-    expect(markers()).toHaveLength(1);
-    expect(markers()[0][0].payload.target.tag).toBe("input");
-  });
-
   it("ignores typing spaces in a text input and newlines in a textarea", () => {
     key(document.querySelector("input[type=text]"), " ");
     key(document.querySelector("textarea"), "Enter");
@@ -83,12 +78,33 @@ describe("content_script chapter markers", () => {
     expect(markers()).toHaveLength(2);
   });
 
-  it("records a later synthetic click once the echo window has passed", () => {
-    vi.useFakeTimers();
+  it("records a synthetic click on an unrelated element after a keyboard step", () => {
     key(document.querySelector("button"), "Enter");
-    vi.advanceTimersByTime(1500);
-    click(document.querySelector("a"), 0);
+    click(document.querySelector("button"), 0); // the echo
+    click(document.querySelector("a"), 0);      // e.g. the app calling .click()
     expect(markers()).toHaveLength(2);
+  });
+
+  it("still swallows the echo when Space is held for a while", () => {
+    vi.useFakeTimers();
+    const btn = document.querySelector("button");
+    key(btn, " ");
+    vi.advanceTimersByTime(2000);
+    click(btn, 0);
+    expect(markers()).toHaveLength(1);
+  });
+
+  it("swallows the submit-button echo after Enter in a form field", () => {
+    key(document.querySelector("form input"), "Enter");
+    click(document.querySelector("form button"), 0);
+    expect(markers()).toHaveLength(1);
+  });
+
+  it("ignores keys that don't activate the focused element", () => {
+    key(document.querySelector("a"), " ");                     // Space scrolls
+    key(document.querySelector("input[type=checkbox]"), "Enter"); // Enter doesn't toggle
+    key(document.querySelector("select"), "Enter");
+    expect(markers()).toHaveLength(0);
   });
 
   it("emits nothing after recording stops", () => {
