@@ -122,6 +122,13 @@ recBtn.addEventListener("click", async () => {
 
 async function onRecBtnClick() {
   if (!isRecording) {
+    // Ask for site access FIRST, before any await: permissions.request only
+    // works while the click's user activation is fresh, and the mic prompt and
+    // screen picker below take a person several seconds. Resolves immediately,
+    // with no prompt, once granted. Declining still records video; only click
+    // capture needs it (the side panel warns when markers are unavailable).
+    try { await chrome.permissions.request({ origins: ["<all_urls>"] }); } catch {}
+
     // Prepare the mic FIRST via the offscreen document. Side-panel
     // getUserMedia can't show the permission prompt; offscreen docs with
     // reason USER_MEDIA can. This call asks the offscreen doc to acquire the
@@ -196,9 +203,6 @@ async function onRecBtnClick() {
       }
       return;
     }
-
-    const hasHost = await chrome.permissions.contains({ origins: ["<all_urls>"] });
-    if (!hasHost) { try { await chrome.permissions.request({ origins: ["<all_urls>"] }); } catch {} }
 
     // Brief "get ready" beat before MediaRecorder actually starts — gives
     // Chrome's "is sharing" indicator time to settle (otherwise the recording

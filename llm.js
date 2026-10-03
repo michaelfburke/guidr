@@ -17,7 +17,8 @@
  * 5. Gemini: responseMimeType:"application/json" guarantees structured output
  *    with no fence-stripping overhead.
  * 6. max_tokens capped at 400 — title+body+voiceover fit comfortably.
- * 7. temperature 0 everywhere for deterministic JSON.
+ * 7. temperature 0 for deterministic JSON, except Anthropic: Claude Opus
+ *    4.7+ rejects sampling parameters with a 400, so none are sent there.
  */
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -200,6 +201,10 @@ function anthropicHeaders(apiKey) {
     "x-api-key": apiKey,
     "anthropic-version": "2023-06-01",
     "anthropic-beta": "prompt-caching-2024-07-31",
+    // Required for CORS: without it the API rejects the preflight, so calls
+    // fail whenever the extension lacks host access to api.anthropic.com
+    // (fresh install, or the user declined site access).
+    "anthropic-dangerous-direct-browser-access": "true",
   };
 }
 
@@ -208,7 +213,6 @@ async function callAnthropic(settings, system, userText, screenshotDataUrl) {
   const body = {
     model: settings.model || ANTHROPIC_DEFAULT_MODEL,
     max_tokens: 400,
-    temperature: 0,
     // Prompt caching: system prompt is charged once per 5-min cache window
     system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content }],
@@ -221,7 +225,6 @@ async function callAnthropicText(settings, system, userText) {
   const body = {
     model: settings.model || ANTHROPIC_DEFAULT_MODEL,
     max_tokens: 800,
-    temperature: 0,
     system,
     messages: [{ role: "user", content: userText }],
   };

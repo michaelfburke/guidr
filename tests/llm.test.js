@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   pruneTarget,
   buildSystemPrompt,
@@ -7,6 +7,8 @@ import {
   buildOpenAIContent,
   buildGeminiParts,
   parseJson,
+  enrichStep,
+  generateFullScript,
 } from "../llm.js";
 
 describe("pruneTarget", () => {
@@ -116,5 +118,44 @@ describe("parseJson", () => {
   });
   it("throws when nothing usable is present", () => {
     expect(() => parseJson("complete garbage")).toThrow(/no usable content/i);
+  });
+});
+
+describe("anthropic requests", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function stubFetch(text) {
+    const fetchMock = vi.fn(async () => new Response(
+      JSON.stringify({ content: [{ type: "text", text }] }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    ));
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  const settings = { provider: "anthropic", apiKey: "sk-test", model: "claude-opus-4-7" };
+  const step = { index: 0, url: "https://app.test/", pageTitle: "App", target: { text: "Save" } };
+
+  it("sends the browser-access header and no sampling params when enriching", async () => {
+    const fetchMock = stubFetch('{"title":"Click Save","body":"Saves it."}');
+    const out = await enrichStep(step, settings);
+    expect(out.title).toBe("Click Save");
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("https://api.anthropic.com/v1/messages");
+    expect(init.headers["anthropic-dangerous-direct-browser-access"]).toBe("true");
+    const body = JSON.parse(init.body);
+    expect(body).not.toHaveProperty("temperature");
+    expect(body.model).toBe("claude-opus-4-7");
+  });
+
+  it("does the same for full-script generation", async () => {
+    const fetchMock = stubFetch("Welcome. Click Save. Done.");
+    await generateFullScript(
+      { name: "Guide", steps: [{ enriched: true, title: "Save", voiceoverScript: "Click Save." }] },
+      settings,
+    );
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.headers["anthropic-dangerous-direct-browser-access"]).toBe("true");
+    expect(JSON.parse(init.body)).not.toHaveProperty("temperature");
   });
 });

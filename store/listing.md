@@ -41,7 +41,7 @@ Keep in sync with `manifest.json`, `PRIVACY.md`, and the README.
 - Screenshots 1280×800 (3–5): recording in progress · editor with an enriched step · annotation tools · export menu · settings with provider picker
 - Small promo tile 440×280
 
-**Homepage URL:** https://michaelfburke.github.io/guidr/ (GitHub Pages, `docs/`). Confirm it's live before submitting.
+**Homepage URL:** https://michaelfburke.github.io/guidr/ (GitHub Pages, `docs/`)
 **Support URL:** https://github.com/michaelfburke/guidr/issues
 
 ---
@@ -87,4 +87,4 @@ Keep in sync with `manifest.json`, `PRIVACY.md`, and the README.
 - [ ] Real-browser run: first recording on a fresh profile shows the site-access prompt, and steps are captured
 - [ ] Icon padded; screenshots and promo tile made
 - [ ] Version bumped in both `manifest.json` and `package.json`; `npm run package`; upload `dist/guidr-<version>.zip`
-- [ ] Homepage and privacy policy URLs load
+- [ ] Privacy policy URL loads (homepage confirmed live)
