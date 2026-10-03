@@ -1,91 +1,131 @@
 # Guidr Privacy Policy
 
-_Last updated: 2026-05-26_
+_Last updated: 2026-10-03_
 
-Guidr is a Chrome extension that records your interactions with web pages and
-uses an AI provider you choose (Anthropic, OpenAI, or OpenRouter) to turn them
-into step-by-step guides. This policy describes exactly what data the extension
-handles, where it lives, and where (if anywhere) it goes.
+Guidr is a Chrome extension that records you clicking through a web app and
+uses an AI provider you choose (Anthropic, OpenAI, Google Gemini, or
+OpenRouter) to turn the recording into a step-by-step guide. This policy
+describes exactly what data the extension handles, where it lives, and where
+(if anywhere) it goes.
 
 ## TL;DR
 
 - Guidr has no server. The developer never sees your data.
 - Recordings live only in your browser, in extension-sandboxed storage.
-- When you click **Enrich**, the captured step (screenshot + DOM metadata) is
-  sent to the AI provider you selected, using the API key you provided.
+- Nothing leaves your browser until you click **Enrich** or **Generate
+  script**. Then the relevant step data is sent to the AI provider you
+  selected, using the API key you provided.
 - Your API key is stored locally and only ever sent to that provider.
-- Uninstalling the extension or clearing its storage deletes everything.
+- Uninstalling the extension or clicking **Clear all Guidr data** deletes
+  everything.
 
 ## What Guidr captures
 
-While you are actively recording a guide, and only then, Guidr captures:
+Only while you are actively recording a guide, and only after you start it:
 
-- Screenshots of the active browser tab (before and after each click).
-- The element you clicked: CSS selector, visible text, ARIA label, role, and
-  bounding rectangle.
-- The page URL and document title at the moment of the click.
-- The viewport dimensions and device pixel ratio (needed to render the guide).
+- **Screen video.** When you start a recording, Chrome asks you to choose
+  what to share — a browser tab, a window, or your entire screen. Guidr
+  records a video of whatever you pick until you stop. Anything visible in
+  the shared area is in the video, including text you type into forms.
+  Choose a single tab and close anything sensitive before recording.
+- **Microphone narration.** When you start a recording, Guidr asks Chrome
+  for microphone access. If you allow it, your narration is recorded
+  alongside the video until you stop. If you deny access or have no
+  microphone, the recording continues without audio.
+- **Click details.** For each click (or keyboard activation of a button or
+  link) in the recorded tab: the element's tag, id, CSS classes, visible
+  text, ARIA label and role, placeholder, input type and name, link URL,
+  a CSS selector, its position on screen, the viewport size, and the
+  nearest page landmark.
+- **Page context.** The page URL and document title at the moment of each
+  click.
 
-Guidr does **not** capture: keystrokes, form values, clipboard contents, cookies,
-browser history outside the recording session, or anything from tabs other than
-the one you are recording.
+Guidr does **not** record keystrokes as data, read form values, clipboard
+contents or cookies, or capture anything when you are not recording. (As
+noted above, the screen video shows whatever is on screen.)
 
 ## What Guidr stores, and where
 
-- **API key, model selection, tone-of-voice settings, and example guides:**
-  `chrome.storage.local` (sandboxed per-extension, never synced).
-- **Session metadata** (guide titles, step lists): `chrome.storage.local`.
-- **Steps and screenshots:** IndexedDB inside the extension, in your browser.
+All of this stays on your machine:
 
-All of the above stays on your machine. Guidr operates no server and the
-developer receives no telemetry, analytics, crash reports, or recordings.
+- **API key, provider and model choice, tone-of-voice guide, example guides,
+  and UI preferences:** `chrome.storage.local` (sandboxed per extension, not
+  synced to your Google account).
+- **Guide list** (titles, step counts, timestamps): `chrome.storage.local`.
+- **The in-progress recording's step list:** `chrome.storage.session`
+  (in memory, cleared when the browser closes).
+- **Screen recordings, narration audio, step details, generated text, and
+  cached GIFs:** IndexedDB inside the extension.
+
+Guidr sends the developer no telemetry, analytics, crash reports, or
+recordings.
 
 ## What gets sent to third parties
 
-When you click **Enrich** on a step or **Generate script** for a guide, Guidr
-sends the following to the AI provider you configured in Settings:
+Guidr makes network requests only for the actions below, directly from your
+browser. It does not proxy or observe them.
 
-- The step screenshot(s).
-- The DOM metadata for the clicked element.
-- The page URL and title.
-- Your tone-of-voice guide and any example guides, if you provided them.
-- Your API key, in the request's Authorization header.
+**When you click Enrich on a step**, Guidr sends to your chosen AI provider:
 
-The destination depends on your provider selection:
+- One still frame from the screen recording, taken at the moment of the click.
+- A summary of that step's click details (element type, text, label, role)
+  and the page URL and title.
+- Your tone-of-voice guide and example guides, if you added any.
+
+**When you click Generate script**, Guidr sends the guide's title and each
+step's generated title and voiceover text.
+
+**When you test your key or load the model list in Settings**, Guidr sends
+your API key to the provider to validate it and list available models.
+
+Your API key accompanies every provider request. The destination depends on
+your provider selection:
 
 - Anthropic — `https://api.anthropic.com`
 - OpenAI — `https://api.openai.com`
+- Google Gemini — `https://generativelanguage.googleapis.com` (the key is sent
+  as a URL parameter, as Google's API requires)
 - OpenRouter — `https://openrouter.ai`
 
-These requests are made directly from your browser to the provider. Guidr does
-not proxy or observe them. The provider's own privacy and data-retention
-policies apply to anything you send.
+The provider's own privacy and data-retention policies apply to anything you
+send. Screen video and narration audio are never uploaded; only the single
+frames described above are.
 
-Guidr does not contact any other network endpoint. It does not load remote code.
+**When you add an example guide by URL in Settings**, Guidr asks for
+permission to access that site, then fetches the page (without cookies) to
+extract a text sample. The sample is stored locally and included in
+enrichment prompts as a style reference.
+
+Guidr contacts no other network endpoint and does not load remote code.
 
 ## Permissions, and why
 
-- `activeTab`, `tabs`, `scripting` — needed to inject the recording logic into
-  the tab you choose to record, and to take screenshots of that tab.
-- `storage` — to remember your API key and settings.
+- `desktopCapture` — to record the tab, window, or screen you choose.
+- `offscreen` — to host microphone capture for narration (Chrome side panels
+  cannot show the microphone permission prompt themselves).
+- `activeTab`, `tabs`, `scripting` — to inject the click-detail logic into
+  the tab you are recording, and re-inject it after the tab navigates.
+- `storage` — to remember your settings and guide list.
 - `sidePanel` — Guidr's UI is a side panel.
 - `downloads` — to save guides you export to disk.
-- `optional_host_permissions: <all_urls>` — requested the first time you record,
-  so screenshot capture continues to work after page navigations. Granted by
-  you, revocable at `chrome://extensions` → Guidr → Site access.
+- Optional host access (`<all_urls>`) — requested the first time you record,
+  so click details can be collected on whatever site you document, and when
+  you add an example guide by URL. Granted by you, revocable at
+  `chrome://extensions` → Guidr → Site access.
 
 ## Your controls
 
-- Delete an individual guide or step from the side panel.
-- Clear all Guidr data: `chrome://extensions` → Guidr → Remove, or use the
-  "Clear all data" button in Settings.
-- Revoke the all-sites permission at any time from `chrome://extensions`.
-- Use a different API key, or no key — without one, no data leaves your browser.
+- Delete an individual guide, its video, or its narration from the side panel.
+- Clear all Guidr data: Settings → **Clear all Guidr data**, or remove the
+  extension at `chrome://extensions`.
+- Revoke site access at any time from `chrome://extensions`.
+- Use Guidr with no API key: you can record and edit guides by hand, and
+  no data leaves your browser.
 
 ## Children
 
-Guidr is not directed at children under 13 and the developer does not knowingly
-collect data from them. (Guidr does not collect data from anyone.)
+Guidr is not directed at children under 13 and the developer does not
+knowingly collect data from them. (Guidr does not collect data from anyone.)
 
 ## Changes to this policy
 

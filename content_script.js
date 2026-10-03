@@ -49,32 +49,52 @@
     document.removeEventListener("keydown", handleKeyNav, true);
   }
 
-  function handleClick(e) {
-    const el = e.target;
-    const target = describeElement(el);
+  // Keyboard activation of a button/link (Enter, or Space on keyup) makes the
+  // browser dispatch a synthetic click (event.detail === 0) right after our
+  // keydown marker. Swallow that echo so one action yields one step.
+  const KEY_ECHO_WINDOW_MS = 1000;
+  let lastKeyMarkerTs = 0;
 
+  function handleClick(e) {
+    if (e.detail === 0 && Date.now() - lastKeyMarkerTs < KEY_ECHO_WINDOW_MS) return;
+    emitMarker(e.target);
+  }
+
+  function emitMarker(el) {
     chrome.runtime.sendMessage({
       type: "GUIDR_CHAPTER_MARKER",
       payload: {
         absTs: Date.now(),
-        target,
+        target: describeElement(el),
         url: location.href,
         pageTitle: document.title,
       },
-    });
+    }).catch(() => {});
+  }
+
+  const NON_TEXT_INPUT_TYPES = ["button", "submit", "reset", "checkbox", "radio", "file", "image", "color", "range"];
+
+  function isTextEntry(el) {
+    const tag = el.tagName.toLowerCase();
+    if (tag === "textarea" || el.isContentEditable) return true;
+    return tag === "input" && !NON_TEXT_INPUT_TYPES.includes((el.type || "text").toLowerCase());
   }
 
   function handleKeyNav(e) {
-    if (!["Enter", " "].includes(e.key)) return;
+    if (!["Enter", " "].includes(e.key) || e.repeat) return;
     const el = document.activeElement;
     if (!el || el === document.body) return;
+    // Typing a space, or a newline in a multi-line field, isn't a step.
+    // Enter in a single-line input is (it usually submits).
+    if (isTextEntry(el) && (e.key === " " || el.tagName.toLowerCase() !== "input")) return;
     const tag = el.tagName.toLowerCase();
     const role = el.getAttribute("role");
     const isInteractive =
-      ["button", "a", "input", "select", "textarea"].includes(tag) ||
-      ["button", "link", "menuitem", "tab", "option"].includes(role);
+      ["button", "a", "input", "select"].includes(tag) ||
+      ["button", "link", "menuitem", "tab", "option", "checkbox", "radio", "switch"].includes(role);
     if (!isInteractive) return;
-    handleClick({ target: el, stopPropagation: () => {} });
+    lastKeyMarkerTs = Date.now();
+    emitMarker(el);
   }
 
   function describeElement(el) {

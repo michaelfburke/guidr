@@ -65,34 +65,66 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 // activeSession: { id, tabId, name, startedAt, steps: [] }
 // startedAt is the wall-clock moment the side panel started MediaRecorder —
 // chapter markers are measured relative to it.
+//
+// Chrome terminates an idle service worker after ~30s, which would wipe this
+// in-memory copy mid-recording. It is mirrored to chrome.storage.session
+// (in-memory, cleared on browser restart) and restored on the next wake-up.
+// Every handler that reads activeSession must `await restoreActiveSession()`
+// first.
+const ACTIVE_SESSION_KEY = "guidr_activeSession";
 let activeSession = null;
+let restorePromise = null;
+
+function restoreActiveSession() {
+  restorePromise ??= chrome.storage.session
+    .get(ACTIVE_SESSION_KEY)
+    .then((res) => { activeSession ??= res[ACTIVE_SESSION_KEY] || null; })
+    .catch(() => {});
+  return restorePromise;
+}
+
+async function setActiveSession(session) {
+  activeSession = session;
+  await persistActiveSession();
+}
+
+async function persistActiveSession() {
+  try {
+    if (activeSession) await chrome.storage.session.set({ [ACTIVE_SESSION_KEY]: activeSession });
+    else await chrome.storage.session.remove(ACTIVE_SESSION_KEY);
+  } catch (err) {
+    console.warn("[Guidr] could not persist recording state:", err);
+  }
+}
 
 async function handleStartRecording({ sessionName, tabId, startedAt }, sendResponse) {
+  await restoreActiveSession();
   if (activeSession) {
-    sendResponse({ ok: false, error: "Already recording — stop the current session first" });
-    return;
+    // The side panel never starts a second recording while its own is live,
+    // so a leftover session means the panel that owned it went away without
+    // stopping (closed mid-recording). Detach it rather than blocking new
+    // recordings until the browser restarts.
+    const stale = activeSession;
+    await setActiveSession(null);
+    await chrome.tabs.sendMessage(stale.tabId, { type: "GUIDR_STOP_RECORDING" }).catch(() => {});
   }
   if (!tabId || !startedAt) {
     sendResponse({ ok: false, error: "Missing recording context — restart the side panel and try again" });
     return;
   }
 
-  const settings = await chrome.storage.local.get(["apiKey"]);
-  if (!settings.apiKey) {
-    sendResponse({ ok: false, error: "No API key configured. Go to Options." });
-    return;
-  }
-
+  // No API key check here: recording is fully local. The key is only needed
+  // for enrichment, which reports its own error if it's missing.
   const sessionId = `session_${Date.now()}`;
   const uniqueName = await uniqueSessionName(sessionName || "Untitled guide");
 
-  activeSession = {
+  await setActiveSession({
     id: sessionId,
     tabId,
     name: uniqueName,
     startedAt,
     steps: [],
-  };
+  });
 
   let markersActive = false;
   try {
@@ -109,16 +141,18 @@ async function handleStartRecording({ sessionName, tabId, startedAt }, sendRespo
 }
 
 async function handleStopRecording(sendResponse) {
+  await restoreActiveSession();
   if (!activeSession) { sendResponse({ ok: false, error: "No active session" }); return; }
 
   await chrome.tabs.sendMessage(activeSession.tabId, { type: "GUIDR_STOP_RECORDING" }).catch(() => {});
 
   const session = { ...activeSession };
-  activeSession = null;
+  await setActiveSession(null);
   sendResponse({ ok: true, session });
 }
 
 async function handleChapterMarker({ payload }, sender, sendResponse) {
+  await restoreActiveSession();
   if (!activeSession) { sendResponse({ ok: false }); return; }
   if (sender.tab?.id !== activeSession.tabId) { sendResponse({ ok: false }); return; }
 
@@ -141,6 +175,7 @@ async function handleChapterMarker({ payload }, sender, sendResponse) {
   };
 
   activeSession.steps.push(step);
+  await persistActiveSession();
   await db.saveStep(step);
   await db.saveSession(activeSession);
 
@@ -155,6 +190,7 @@ async function handleChapterMarker({ payload }, sender, sendResponse) {
 // ─── Tab lifecycle ───────────────────────────────────────────────────────────
 
 chrome.tabs.onUpdated.addListener(async (tabId, info) => {
+  await restoreActiveSession();
   if (!activeSession || activeSession.tabId !== tabId) return;
   if (info.status !== "complete") return;
   try {
@@ -180,7 +216,8 @@ async function injectContentScript(tabId) {
 async function handleEnrichStep({ stepId, sessionId, screenshotDataUrl }, sendResponse) {
   const step = await db.getStep(stepId);
   const settings = await chrome.storage.local.get(["apiKey", "provider", "model", "openrouterModel", "toneGuide", "exampleGuides"]);
-  if (!step || !settings.apiKey) { sendResponse({ ok: false }); return; }
+  if (!step) { sendResponse({ ok: false, error: "Step not found" }); return; }
+  if (!settings.apiKey) { sendResponse({ ok: false, error: "No API key configured. Add one in Settings to enrich steps." }); return; }
 
   try {
     // Defensive: existing installs where the options page was never
@@ -198,9 +235,13 @@ async function handleEnrichStep({ stepId, sessionId, screenshotDataUrl }, sendRe
     const updated = { ...step, ...result, enriched: true };
     await db.saveStep(updated);
 
+    await restoreActiveSession();
     if (activeSession?.id === sessionId) {
       const idx = activeSession.steps.findIndex((s) => s.id === stepId);
-      if (idx !== -1) activeSession.steps[idx] = updated;
+      if (idx !== -1) {
+        activeSession.steps[idx] = updated;
+        await persistActiveSession();
+      }
     }
 
     sendResponse({ ok: true, step: updated });
@@ -245,7 +286,8 @@ async function handleDeleteStep({ stepId, sessionId }, sendResponse) {
 }
 
 async function handleDeleteSession({ sessionId }, sendResponse) {
-  if (activeSession?.id === sessionId) activeSession = null;
+  await restoreActiveSession();
+  if (activeSession?.id === sessionId) await setActiveSession(null);
   await db.deleteSession(sessionId);
   sendResponse({ ok: true });
 }

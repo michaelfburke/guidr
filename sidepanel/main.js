@@ -42,6 +42,8 @@ applyOnboardingState();
 window.addEventListener("beforeunload", () => {
   if (mediaRecorder && mediaRecorder.state !== "inactive") {
     try { mediaRecorder.stop(); } catch {}
+    // Release the SW's recording state too, best-effort.
+    try { sw({ type: "SP_STOP_RECORDING" }); } catch {}
   }
   if (mediaStream) {
     try { mediaStream.getTracks().forEach(t => t.stop()); } catch {}

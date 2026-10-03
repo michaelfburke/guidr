@@ -39,6 +39,17 @@ guidr-extension/
 7. Hit **Stop recording** → **✦ Enrich all** to generate text
 8. Export as Markdown, HTML, or Intercom JSON
 
+### Packaging for the Chrome Web Store
+
+```sh
+npm run package   # → dist/guidr-<version>.zip
+```
+
+Zips only the runtime files (no `node_modules`, tests, or docs), after
+checking that `manifest.json` and `package.json` versions match and that every
+relative import, `src`/`href`, CSS `url()` and `chrome.runtime.getURL` path
+resolves to a shipped file. Bump the version in both files before a release.
+
 ---
 
 ## LLM providers
@@ -126,7 +137,7 @@ The source of truth for each session is a single WebM blob from `MediaRecorder`;
 ## Roadmap
 
 - [ ] v0.1 — capture → enrich → export (this codebase)
-- [ ] v0.2 — drag-to-reorder steps, re-capture individual step
+- [x] v0.2 — drag-to-reorder steps, re-capture individual step
 - [ ] v0.3 — ElevenLabs TTS voiceover generation
 - [ ] v0.4 — synthesised walkthrough video (screenshots + animated cursor + audio)
 - [ ] v0.5 — direct Intercom publish (with image upload)
@@ -140,7 +151,7 @@ The source of truth for each session is a single WebM blob from `MediaRecorder`;
 - **Cross-origin iframes** (Stripe, Auth0, embedded widgets): content script cannot access these frames. Steps inside iframes are captured as screenshots only, with no DOM context.
 - **Canvas/WebGL apps**: no DOM to capture; screenshot-only mode.
 - **Intercom base64 images**: Intercom's Help Center API rejects data URLs. Until image hosting is added, export as HTML and embed manually.
-- **Service worker lifecycle**: Chrome may suspend the SW after inactivity. Recording state is persisted to `chrome.storage.local` so it survives restarts, but you may see a brief reconnection delay.
+- **Service worker lifecycle**: Chrome may suspend the SW after inactivity. The in-progress recording's state is mirrored to `chrome.storage.session` and restored when the SW wakes, so steps aren't lost mid-recording.
 
 ---
 
