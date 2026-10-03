@@ -49,32 +49,72 @@
     document.removeEventListener("keydown", handleKeyNav, true);
   }
 
-  function handleClick(e) {
-    const el = e.target;
-    const target = describeElement(el);
+  // Keyboard activation of a control makes the browser dispatch a synthetic
+  // click (event.detail === 0) right after our keydown marker — on keydown for
+  // Enter, on keyup for Space, and on the form's submit button for Enter in a
+  // text field. Remember what the key acted on and swallow that one echo, so
+  // one action yields one step.
+  const KEY_ECHO_MAX_MS = 10_000;
+  let pendingKeyEcho = null; // { el, form, ts }
 
+  function handleClick(e) {
+    if (e.detail === 0 && isKeyEcho(e.target)) {
+      pendingKeyEcho = null;
+      return;
+    }
+    emitMarker(e.target);
+  }
+
+  function isKeyEcho(target) {
+    if (!pendingKeyEcho || Date.now() - pendingKeyEcho.ts > KEY_ECHO_MAX_MS) return false;
+    const { el, form } = pendingKeyEcho;
+    return el === target || el.contains(target) || (!!form && target.form === form);
+  }
+
+  function emitMarker(el) {
     chrome.runtime.sendMessage({
       type: "GUIDR_CHAPTER_MARKER",
       payload: {
         absTs: Date.now(),
-        target,
+        target: describeElement(el),
         url: location.href,
         pageTitle: document.title,
       },
-    });
+    }).catch(() => {});
+  }
+
+  const BUTTON_INPUT_TYPES = ["button", "submit", "reset", "image"];
+  const TOGGLE_INPUT_TYPES = ["checkbox", "radio"];
+  const NON_TEXT_INPUT_TYPES = [...BUTTON_INPUT_TYPES, ...TOGGLE_INPUT_TYPES, "file", "color", "range", "hidden"];
+  const ENTER_ROLES = ["button", "link", "menuitem", "menuitemcheckbox", "menuitemradio", "tab", "option", "treeitem"];
+  const SPACE_ROLES = ["button", "checkbox", "radio", "switch", "menuitem", "menuitemcheckbox", "menuitemradio", "tab", "option"];
+
+  // Does pressing `key` on `el` perform an action worth a step? Mirrors which
+  // keys activate which controls, so e.g. Space on a link (scrolls) or Enter
+  // on a checkbox (does nothing) doesn't create a phantom step.
+  function keyActivates(el, key) {
+    const tag = el.tagName.toLowerCase();
+    const type = (el.type || "").toLowerCase();
+    const role = el.getAttribute("role");
+    if (tag === "textarea" || tag === "select" || el.isContentEditable) return false;
+    if (key === "Enter") {
+      if (tag === "button" || (tag === "a" && el.hasAttribute("href"))) return true;
+      if (tag === "input") return BUTTON_INPUT_TYPES.includes(type) || !NON_TEXT_INPUT_TYPES.includes(type); // implicit submit
+      return ENTER_ROLES.includes(role);
+    }
+    // Space
+    if (tag === "button") return true;
+    if (tag === "input") return BUTTON_INPUT_TYPES.includes(type) || TOGGLE_INPUT_TYPES.includes(type);
+    if (tag === "a") return false;
+    return SPACE_ROLES.includes(role);
   }
 
   function handleKeyNav(e) {
-    if (!["Enter", " "].includes(e.key)) return;
+    if (!["Enter", " "].includes(e.key) || e.repeat) return;
     const el = document.activeElement;
-    if (!el || el === document.body) return;
-    const tag = el.tagName.toLowerCase();
-    const role = el.getAttribute("role");
-    const isInteractive =
-      ["button", "a", "input", "select", "textarea"].includes(tag) ||
-      ["button", "link", "menuitem", "tab", "option"].includes(role);
-    if (!isInteractive) return;
-    handleClick({ target: el, stopPropagation: () => {} });
+    if (!el || el === document.body || !keyActivates(el, e.key)) return;
+    pendingKeyEcho = { el, form: el.form || null, ts: Date.now() };
+    emitMarker(el);
   }
 
   function describeElement(el) {

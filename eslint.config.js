@@ -54,6 +54,16 @@ export default [
     },
   },
 
+  // Node tooling scripts.
+  {
+    files: ["scripts/**/*.js"],
+    languageOptions: {
+      ecmaVersion: 2023,
+      sourceType: "module",
+      globals: globals.node,
+    },
+  },
+
   // Test suite.
   {
     files: ["tests/**/*.js", "**/*.test.js", "vitest.config.js"],

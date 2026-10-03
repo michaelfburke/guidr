@@ -31,3 +31,6 @@ jobs:
 
       - name: Unit tests
         run: npm test
+
+      - name: Package extension
+        run: npm run package

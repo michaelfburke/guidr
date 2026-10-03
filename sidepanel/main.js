@@ -42,6 +42,8 @@ applyOnboardingState();
 window.addEventListener("beforeunload", () => {
   if (mediaRecorder && mediaRecorder.state !== "inactive") {
     try { mediaRecorder.stop(); } catch {}
+    // Release the SW's recording state too, best-effort.
+    try { sw({ type: "SP_STOP_RECORDING" }); } catch {}
   }
   if (mediaStream) {
     try { mediaStream.getTracks().forEach(t => t.stop()); } catch {}
@@ -108,7 +110,17 @@ function showView(id) {
 }
 
 // ── Recording ──────────────────────────────────────────────────────────────
+// isRecording only flips once the countdown ends, so guard the whole
+// start/stop flow against a second click while the first is still running
+// (it would open a second picker and orphan the first MediaRecorder).
+let recBtnBusy = false;
 recBtn.addEventListener("click", async () => {
+  if (recBtnBusy) return;
+  recBtnBusy = true;
+  try { await onRecBtnClick(); } finally { recBtnBusy = false; }
+});
+
+async function onRecBtnClick() {
   if (!isRecording) {
     // Prepare the mic FIRST via the offscreen document. Side-panel
     // getUserMedia can't show the permission prompt; offscreen docs with
@@ -280,7 +292,7 @@ recBtn.addEventListener("click", async () => {
   } else {
     await finalizeRecording();
   }
-});
+}
 
 async function finalizeRecording() {
   if (!mediaRecorder) return;
