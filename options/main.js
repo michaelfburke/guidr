@@ -1,6 +1,8 @@
 import { connectOpenRouter } from "../openrouter.js";
-import { DEFAULT_MODELS, modelBelongsTo } from "../llm.js";
+import { DEFAULT_MODELS, modelBelongsTo, keyFitsProvider } from "../llm.js";
 import { listModels, cachedModels, estimateStepCost, normalizeModelId } from "../models.js";
+
+const PROVIDER_LABELS = { anthropic: "an Anthropic", openai: "an OpenAI", gemini: "a Gemini", openrouter: "an OpenRouter" };
 
 const KEY_URLS = {
   anthropic:  "https://console.anthropic.com/settings/keys",
@@ -154,6 +156,9 @@ function renderModels(p, entry, error) {
     // (claude-haiku-4-5 vs claude-haiku-4-5-20251001): show it once.
     const isDefault = (m) => normalizeModelId(m.id) === normalizeModelId(def);
     const listed = models.find(isDefault);
+    // A saved snapshot of the default (e.g. the old dated Haiku id) is the
+    // same model: select the default entry rather than flag it unavailable.
+    if (isDefault({ id: state.model })) state.model = def;
     const options = [{ id: def, text: `${listed ? `${listed.label} · ${def}` : def} · recommended` }];
     for (const m of models) if (!isDefault(m)) options.push({ id: m.id, text: modelLabel(m) });
     if (!options.some((o) => o.id === state.model)) {
@@ -175,13 +180,16 @@ function renderModels(p, entry, error) {
     status.textContent = `${models.length} vision models available${p === "openrouter" ? "" : " to your key"} · updated daily`;
   } else {
     status.className = "hint";
-    status.textContent = "Test your key to see every model your account can use.";
+    status.textContent = state.apiKey && p !== "openrouter" && !keyFitsProvider(p, state.apiKey)
+      ? `Your saved key isn't for ${PROVIDER_LABELS[p].replace(/^an? /, "")}. Add one to see its models.`
+      : "Test your key to see every model your account can use.";
   }
 }
 
 let modelsRequest = 0;
 async function refreshModels(p, { force = false } = {}) {
-  if (p !== "openrouter" && !state.apiKey) return;
+  // The key is shared across providers: don't send one provider's key to another.
+  if (p !== "openrouter" && (!state.apiKey || !keyFitsProvider(p, state.apiKey))) return;
   const req = ++modelsRequest;
   try {
     const entry = await listModels(p, state.apiKey, { force });
@@ -233,6 +241,11 @@ document.getElementById("testKey").addEventListener("click", async () => {
   const p = state.provider;
   const st = document.getElementById("keyStatus");
   if (!key) { st.className="status err"; st.textContent="Enter a key first."; return; }
+  if (!keyFitsProvider(p, key)) {
+    st.className = "status err";
+    st.textContent = `That doesn't look like ${PROVIDER_LABELS[p]} key. Check the provider selected above.`;
+    return;
+  }
   st.className="status busy"; st.innerHTML='<span class="spinner"></span> Testing…';
 
   try {

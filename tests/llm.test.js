@@ -136,7 +136,7 @@ describe("provider requests", () => {
   }
 
   describe("anthropic", () => {
-    const settings = { provider: "anthropic", apiKey: "sk-test", model: "claude-sonnet-5-5" };
+    const settings = { provider: "anthropic", apiKey: "sk-ant-test", model: "claude-sonnet-5-5" };
 
     it("sends the browser-access header, low effort, and no sampling params", async () => {
       const fetchMock = stubFetch(json({ content: [{ type: "text", text: ok }] }));
@@ -225,20 +225,52 @@ describe("provider requests", () => {
       expect(generationConfig).not.toHaveProperty("temperature");
     });
 
-    it("retries without a thinking config the model doesn't accept", async () => {
+    it("falls back to a zero thinking budget for Gemini 2.5", async () => {
       const fetchMock = stubFetch(
         json({ error: { message: 'Invalid JSON payload received. Unknown name "thinkingLevel"' } }, 400),
         json({ candidates: [{ content: { parts: [{ text: ok }] } }] }),
       );
       await enrichStep(step, { ...settings, model: "gemini-2.5-flash" });
-      expect(bodyOf(fetchMock, 1).generationConfig).not.toHaveProperty("thinkingConfig");
+      expect(bodyOf(fetchMock, 1).generationConfig.thinkingConfig).toEqual({ thinkingBudget: 0 });
+    });
+
+    it("then to the minimum budget, then to no thinking config", async () => {
+      const reject = (msg) => json({ error: { message: msg } }, 400);
+      const fetchMock = stubFetch(
+        reject("thinking_level is not supported for this model"),
+        reject("Budget 0 is invalid. This model only works in thinking mode."),
+        reject("thinking budget 128 out of range"),
+        json({ candidates: [{ content: { parts: [{ text: ok }] } }] }),
+      );
+      await enrichStep(step, { ...settings, model: "gemini-2.5-pro" });
+      expect(bodyOf(fetchMock, 1).generationConfig.thinkingConfig).toEqual({ thinkingBudget: 0 });
+      expect(bodyOf(fetchMock, 2).generationConfig.thinkingConfig).toEqual({ thinkingBudget: 128 });
+      expect(bodyOf(fetchMock, 3).generationConfig).not.toHaveProperty("thinkingConfig");
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+    });
+  });
+
+  describe("api key guard", () => {
+    it("never sends a key that belongs to another provider", async () => {
+      const fetchMock = stubFetch(json({ choices: [{ message: { content: ok } }] }));
+      await expect(enrichStep(step, { provider: "openai", apiKey: "sk-ant-api03-x" }))
+        .rejects.toThrow(/isn't for OpenAI/);
+      await expect(enrichStep(step, { provider: "anthropic", apiKey: "AIzaSyX" })).rejects.toThrow(/Anthropic key/);
+      await expect(enrichStep(step, { provider: "gemini", apiKey: "sk-or-v1-x" })).rejects.toThrow(/Gemini key/);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("allows matching and unrecognised key formats", async () => {
+      stubFetch(json({ choices: [{ message: { content: ok } }] }));
+      await expect(enrichStep(step, { provider: "openai", apiKey: "sk-proj-x" })).resolves.toBeTruthy();
+      await expect(enrichStep(step, { provider: "openrouter", apiKey: "custom-token" })).resolves.toBeTruthy();
     });
   });
 
   describe("openrouter", () => {
     it("defaults to the Haiku alias with low, hidden reasoning", async () => {
       const fetchMock = stubFetch(json({ choices: [{ message: { content: ok } }] }));
-      await enrichStep(step, { provider: "openrouter", apiKey: "sk-or" });
+      await enrichStep(step, { provider: "openrouter", apiKey: "sk-or-v1-test" });
       expect(bodyOf(fetchMock)).toMatchObject({
         model: "~anthropic/claude-haiku-latest",
         reasoning: { effort: "low", exclude: true },

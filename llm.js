@@ -172,6 +172,10 @@ Describe what the user did and write the documentation step.`;
 // ─── Provider dispatch ────────────────────────────────────────────────────────
 
 function withModel(settings) {
+  if (!keyFitsProvider(settings.provider, settings.apiKey)) {
+    const name = PROVIDER_NAMES[settings.provider] || settings.provider;
+    throw new Error(`The saved API key isn't for ${name}. Add your ${name} key in Settings.`);
+  }
   if (settings.provider === "openrouter" || modelBelongsTo(settings.provider, settings.model)) return settings;
   return { ...settings, model: DEFAULT_MODELS[settings.provider] };
 }
@@ -206,11 +210,12 @@ async function dispatchText(settings, system, userText) {
 // replaced thinking budgets with levels). So each request sends only what it
 // needs, plus a few *optional* settings that keep newer reasoning models fast
 // and cheap. When a model rejects one of those with a 400 naming it, the
-// request is retried without it.
+// request is retried with the setting's next alternative, or without it.
 
 /**
  * @param {string} provider  – name for error messages
- * @param {Array<[string, RegExp]>} optional – [dotted body path, matcher for the 400 message]
+ * @param {Array<[string, RegExp, ...any]>} optional – [dotted body path,
+ *   matcher for the 400 message, values to try next, in order]
  */
 async function postJSON(provider, url, headers, body, optional = []) {
   let pending = [...optional];
@@ -224,8 +229,14 @@ async function postJSON(provider, url, headers, body, optional = []) {
     const err = await httpError(res, provider);
     const drop = res.status === 400 && pending.find(([path, re]) => hasPath(body, path) && re.test(err.message));
     if (!drop) throw err;
-    deletePath(body, drop[0]);
+    const [path, re, next, ...rest] = drop;
     pending = pending.filter((o) => o !== drop);
+    if (next === undefined) {
+      deletePath(body, path);
+    } else {
+      setPath(body, path, next);
+      pending.push([path, re, ...rest]);
+    }
   }
 }
 
@@ -234,6 +245,12 @@ function hasPath(obj, path) {
   const last = keys.pop();
   const parent = keys.reduce((o, k) => o?.[k], obj);
   return !!parent && last in parent;
+}
+
+function setPath(obj, path, value) {
+  const keys = path.split(".");
+  const last = keys.pop();
+  keys.reduce((o, k) => (o[k] ??= {}), obj)[last] = value;
 }
 
 function deletePath(obj, path) {
@@ -377,7 +394,11 @@ export function buildOpenAIContent(userText, screenshotDataUrl) {
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 // Google-maintained alias for the current Flash model.
 const GEMINI_DEFAULT_MODEL = "gemini-flash-latest";
-const GEMINI_OPTIONAL = [["generationConfig.thinkingConfig", /thinking/i]];
+// Gemini 3 takes thinking levels; Gemini 2.5 rejects them and takes budgets
+// instead (0 turns thinking off; 2.5 Pro's minimum is 128). Without a cap,
+// thinking eats the output budget and truncates the JSON answer.
+const GEMINI_OPTIONAL = [["generationConfig.thinkingConfig", /thinking/i,
+  { thinkingBudget: 0 }, { thinkingBudget: 128 }]];
 
 // Thinking parts carry `thought: true`; keep only the answer.
 const geminiText = (data) =>
@@ -458,6 +479,16 @@ function openRouterFetch(settings, system, userContent, maxTokens) {
 // the provider it belongs to. (OpenRouter has its own openrouterModel.)
 const MODEL_PREFIX = { anthropic: /^claude-/, openai: /^(gpt-|o\d|chatgpt-)/, gemini: /^gemini-/ };
 export const modelBelongsTo = (provider, id) => !!id && !!MODEL_PREFIX[provider]?.test(id);
+
+// The API key is also one shared setting. Providers' key formats are
+// distinctive, so never send a key that is recognisably another provider's.
+const KEY_OWNER = [[/^sk-ant-/, "anthropic"], [/^sk-or-/, "openrouter"], [/^AIza/, "gemini"], [/^sk-/, "openai"]];
+export function keyFitsProvider(provider, key) {
+  const owner = KEY_OWNER.find(([re]) => re.test(key || ""))?.[1];
+  return !owner || owner === provider;
+}
+
+const PROVIDER_NAMES = { anthropic: "Anthropic", openai: "OpenAI", gemini: "Gemini", openrouter: "OpenRouter" };
 
 /** Model used when the user hasn't picked one, per provider. */
 export const DEFAULT_MODELS = {
