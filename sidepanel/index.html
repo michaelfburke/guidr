@@ -195,6 +195,11 @@
       position: relative;
     }
     .session-card:hover { border-color: var(--accent); background: var(--s3); }
+    .session-card.flash { animation: cardFlash 1.6s ease-out; }
+    @keyframes cardFlash {
+      0%, 30% { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,106,247,0.45); background: var(--s3); }
+      100%    { box-shadow: 0 0 0 0 rgba(124,106,247,0); }
+    }
     .session-card-body { flex: 1; min-width: 0; }
     .session-card-body strong { display: block; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .session-card-body .meta { color: var(--muted); font-size: 11px; display: flex; align-items: center; gap: 6px; margin-top: 2px; }

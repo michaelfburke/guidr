@@ -962,9 +962,18 @@ function extractGifClip(startMs, endMs, fps) {
 // user gesture, so the window id is looked up in advance, not awaited.
 let currentWindowId = null;
 chrome.windows.getCurrent().then((w) => { currentWindowId = w?.id ?? null; }).catch(() => {});
-$("guidesBtn").addEventListener("click", () => {
+$("guidesBtn").addEventListener("click", async () => {
   if (currentWindowId == null) return;
-  chrome.sidePanel.open({ windowId: currentWindowId }).catch((err) => console.warn("[Guidr] Could not open side panel:", err));
+  try {
+    await chrome.sidePanel.open({ windowId: currentWindowId });
+  } catch (err) {
+    console.warn("[Guidr] Could not open side panel:", err);
+    errorToast("Couldn't open the Guidr panel. Click the Guidr icon in the toolbar to see your guides.");
+    return;
+  }
+  // The panel highlights this guide; the toast says where to look.
+  chrome.storage.session.set({ highlightGuide: { sessionId, at: Date.now() } }).catch(() => {});
+  toast("Your guides are in the Guidr panel on the right →");
 });
 
 // ── Session name auto-save ────────────────────────────────────────────────

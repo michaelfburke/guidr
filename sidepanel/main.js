@@ -35,7 +35,7 @@ const captureList    = $("captureList");
 const sessionsList   = $("sessionsList");
 
 // ── Boot ───────────────────────────────────────────────────────────────────
-loadSessions();
+let sessionsLoaded = loadSessions();
 applyOnboardingState();
 applyNarrationState();
 
@@ -88,7 +88,29 @@ $("skipSetupBtn").addEventListener("click", async () => {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && (changes.apiKey || changes.onboardingSkipped)) applyOnboardingState();
   if (area === "local" && changes.narrationEnabled) applyNarrationState();
+  // Guides are renamed, edited and deleted in editor tabs too: keep the list in step.
+  if (area === "local" && changes.guidr_sessions) {
+    clearTimeout(sessionsReloadTimer);
+    sessionsReloadTimer = setTimeout(loadSessions, 150);
+  }
+  if (area === "session" && changes.highlightGuide?.newValue) highlightGuide(changes.highlightGuide.newValue);
 });
+let sessionsReloadTimer = null;
+
+// The editor's "All guides" button asks for its guide to be pointed out, so
+// the click visibly does something even when the panel was already open.
+// Read on load too, for when that click is what opened the panel.
+async function highlightGuide({ sessionId, at } = {}) {
+  if (!sessionId || Date.now() - at > 5000) return;
+  await sessionsLoaded;
+  const card = sessionsList.querySelector(`.session-card[data-id="${CSS.escape(sessionId)}"]`);
+  if (!card) return;
+  card.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  card.classList.remove("flash");
+  void card.offsetWidth; // restart the animation
+  card.classList.add("flash");
+}
+chrome.storage.session.get("highlightGuide").then(({ highlightGuide: h }) => highlightGuide(h)).catch(() => {});
 
 // ── Narration ──────────────────────────────────────────────────────────────
 // Narration is opt-in. Side panels can't show the mic prompt, so turning it on
@@ -154,7 +176,7 @@ function showView(id) {
   $(id).classList.add("active");
   $("btn-home").classList.toggle("has-back", id !== "v-home");
   if (id === "v-home") {
-    loadSessions();
+    sessionsLoaded = loadSessions();
     currentSession = null;
     currentSessionId = null;
   }
@@ -550,6 +572,7 @@ async function loadSessions() {
   list.slice(0, 12).forEach(s => {
     const card = document.createElement("div");
     card.className = "session-card";
+    card.dataset.id = s.id;
     card.tabIndex = 0;
     card.setAttribute("role", "button");
     card.setAttribute("aria-label", `Open ${s.name} in the editor`);
