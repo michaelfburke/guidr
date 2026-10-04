@@ -26,6 +26,7 @@ const INCLUDE = [
   "db.js",
   "draft.js",
   "llm.js",
+  "models.js",
   "openrouter.js",
   "export.js",
   "utils.js",

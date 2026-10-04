@@ -178,6 +178,8 @@
     .status.ok   { color: var(--success); }
     .status.err  { color: var(--error); }
     .status.busy { color: var(--muted); }
+    .hint { margin-top: 6px; font-size: 11px; color: var(--muted); }
+    .hint.err { color: var(--error); }
     .pill {
       display: inline-flex; align-items: center; gap: 4px;
       background: var(--s2); border: 1px solid var(--border2);
@@ -359,25 +361,25 @@
               <input type="radio" name="provider" value="anthropic" checked/>
               <div class="check"></div>
               <div class="provider-card-name">Anthropic</div>
-              <div class="provider-card-desc">Best quality · from ~$0.002 / step</div>
+              <div class="provider-card-desc">Claude models</div>
             </label>
             <label class="provider-card" data-provider="openai">
               <input type="radio" name="provider" value="openai"/>
               <div class="check"></div>
               <div class="provider-card-name">OpenAI</div>
-              <div class="provider-card-desc">Widely used · from ~$0.001 / step</div>
+              <div class="provider-card-desc">GPT models</div>
             </label>
             <label class="provider-card" data-provider="gemini">
               <input type="radio" name="provider" value="gemini"/>
               <div class="check"></div>
               <div class="provider-card-name">Google Gemini</div>
-              <div class="provider-card-desc">Lowest cost · from ~$0.0005 / step</div>
+              <div class="provider-card-desc">Gemini models</div>
             </label>
             <label class="provider-card" data-provider="openrouter">
               <input type="radio" name="provider" value="openrouter"/>
               <div class="check"></div>
               <div class="provider-card-name">OpenRouter</div>
-              <div class="provider-card-desc">Bring your own model · price varies</div>
+              <div class="provider-card-desc">Every major model, one account</div>
             </label>
           </div>
         </div>
@@ -409,11 +411,13 @@
           <div class="card-row-content">
             <select id="modelSelect"></select>
             <div style="margin-top:6px" id="openrouterModelRow" style="display:none">
-              <input type="text" id="openrouterModel" placeholder="e.g. anthropic/claude-haiku-4.5"/>
+              <input type="text" id="openrouterModel" list="openrouterModels" placeholder="e.g. ~anthropic/claude-haiku-latest"/>
+              <datalist id="openrouterModels"></datalist>
               <div style="margin-top:4px;font-size:11px;color:var(--muted)">
                 Browse models at <a class="link" href="https://openrouter.ai/models" target="_blank">openrouter.ai/models</a>
               </div>
             </div>
+            <div class="hint" id="modelStatus" role="status"></div>
             <div class="token-bar">
               <div class="token-label">
                 <span>Estimated cost / step</span>

@@ -82,8 +82,14 @@ with `https://openrouter.ai` for an API key in your OpenRouter account. That
 key is stored and used exactly like a key you paste in, and you can revoke it
 from your OpenRouter dashboard.
 
-**When you test your key or load the model list in Settings**, Guidr sends
-your API key to the provider to validate it and list available models.
+**When you test your key or open Settings**, Guidr sends your API key to the
+provider to validate it and list the models your account can use (refreshed
+at most once a day).
+
+**When you open Settings**, Guidr also downloads OpenRouter's public model and
+price list from `https://openrouter.ai/api/v1/models` (at most once a day) to
+show the estimated cost per step and the OpenRouter model list. This request
+carries no key, recording, or guide data.
 
 Your API key accompanies every provider request. The destination depends on
 your provider selection:

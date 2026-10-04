@@ -35,7 +35,7 @@ describe("connectOpenRouter", () => {
     expect(await chrome.storage.local.get(["provider", "apiKey", "openrouterModel"])).toEqual({
       provider: "openrouter",
       apiKey: "sk-or-v1-new",
-      openrouterModel: "anthropic/claude-haiku-4.5",
+      openrouterModel: "~anthropic/claude-haiku-latest",
     });
   });
 

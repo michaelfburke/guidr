@@ -121,41 +121,128 @@ describe("parseJson", () => {
   });
 });
 
-describe("anthropic requests", () => {
+describe("provider requests", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  function stubFetch(text) {
-    const fetchMock = vi.fn(async () => new Response(
-      JSON.stringify({ content: [{ type: "text", text }] }),
-      { status: 200, headers: { "content-type": "application/json" } },
-    ));
+  const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+  const ok = '{"title":"Click Save","body":"Saves it."}';
+  const step = { index: 0, url: "https://app.test/", pageTitle: "App", target: { text: "Save" } };
+  const bodyOf = (fetchMock, i = 0) => JSON.parse(fetchMock.mock.calls[i][1].body);
+
+  function stubFetch(...responses) {
+    const fetchMock = vi.fn(async () => responses.length > 1 ? responses.shift() : responses[0].clone());
     vi.stubGlobal("fetch", fetchMock);
     return fetchMock;
   }
 
-  const settings = { provider: "anthropic", apiKey: "sk-test", model: "claude-opus-4-7" };
-  const step = { index: 0, url: "https://app.test/", pageTitle: "App", target: { text: "Save" } };
+  describe("anthropic", () => {
+    const settings = { provider: "anthropic", apiKey: "sk-test", model: "claude-sonnet-5-5" };
 
-  it("sends the browser-access header and no sampling params when enriching", async () => {
-    const fetchMock = stubFetch('{"title":"Click Save","body":"Saves it."}');
-    const out = await enrichStep(step, settings);
-    expect(out.title).toBe("Click Save");
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("https://api.anthropic.com/v1/messages");
-    expect(init.headers["anthropic-dangerous-direct-browser-access"]).toBe("true");
-    const body = JSON.parse(init.body);
-    expect(body).not.toHaveProperty("temperature");
-    expect(body.model).toBe("claude-opus-4-7");
+    it("sends the browser-access header, low effort, and no sampling params", async () => {
+      const fetchMock = stubFetch(json({ content: [{ type: "text", text: ok }] }));
+      expect((await enrichStep(step, settings)).title).toBe("Click Save");
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toBe("https://api.anthropic.com/v1/messages");
+      expect(init.headers["anthropic-dangerous-direct-browser-access"]).toBe("true");
+      const body = bodyOf(fetchMock);
+      expect(body).not.toHaveProperty("temperature");
+      expect(body.output_config).toEqual({ effort: "low" });
+      expect(body.max_tokens).toBeGreaterThanOrEqual(2048);
+      expect(body.model).toBe("claude-sonnet-5-5");
+    });
+
+    it("reads the answer after a thinking block", async () => {
+      stubFetch(json({ content: [{ type: "thinking", thinking: "" }, { type: "text", text: ok }] }));
+      expect((await enrichStep(step, settings)).title).toBe("Click Save");
+    });
+
+    it("retries without effort when the model rejects it", async () => {
+      const fetchMock = stubFetch(
+        json({ error: { message: "output_config.effort: effort is not supported on this model" } }, 400),
+        json({ content: [{ type: "text", text: ok }] }),
+      );
+      expect((await enrichStep(step, { ...settings, model: "claude-haiku-4-5" })).title).toBe("Click Save");
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(bodyOf(fetchMock, 1)).not.toHaveProperty("output_config");
+    });
+
+    it("does not retry other 400s", async () => {
+      const fetchMock = stubFetch(json({ error: { message: "messages: image too large" } }, 400));
+      await expect(enrichStep(step, settings)).rejects.toThrow(/image too large/);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("uses the same request shape for full-script generation", async () => {
+      const fetchMock = stubFetch(json({ content: [{ type: "text", text: "Welcome. Click Save. Done." }] }));
+      const out = await generateFullScript(
+        { name: "Guide", steps: [{ enriched: true, title: "Save", voiceoverScript: "Click Save." }] },
+        settings,
+      );
+      expect(out).toBe("Welcome. Click Save. Done.");
+      expect(fetchMock.mock.calls[0][1].headers["anthropic-dangerous-direct-browser-access"]).toBe("true");
+      expect(bodyOf(fetchMock)).not.toHaveProperty("temperature");
+    });
+
+    it("ignores a saved model from another provider", async () => {
+      const fetchMock = stubFetch(json({ content: [{ type: "text", text: ok }] }));
+      await enrichStep(step, { ...settings, model: "gemini-flash-latest" });
+      expect(bodyOf(fetchMock).model).toBe("claude-haiku-4-5");
+    });
   });
 
-  it("does the same for full-script generation", async () => {
-    const fetchMock = stubFetch("Welcome. Click Save. Done.");
-    await generateFullScript(
-      { name: "Guide", steps: [{ enriched: true, title: "Save", voiceoverScript: "Click Save." }] },
-      settings,
-    );
-    const [, init] = fetchMock.mock.calls[0];
-    expect(init.headers["anthropic-dangerous-direct-browser-access"]).toBe("true");
-    expect(JSON.parse(init.body)).not.toHaveProperty("temperature");
+  describe("openai", () => {
+    const settings = { provider: "openai", apiKey: "sk-test" };
+
+    it("uses max_completion_tokens and low reasoning effort, no temperature", async () => {
+      const fetchMock = stubFetch(json({ choices: [{ message: { content: ok } }] }));
+      expect((await enrichStep(step, settings)).title).toBe("Click Save");
+      const body = bodyOf(fetchMock);
+      expect(body).toMatchObject({ model: "gpt-6-luna", reasoning_effort: "low" });
+      expect(body.max_completion_tokens).toBeGreaterThanOrEqual(2048);
+      expect(body).not.toHaveProperty("max_tokens");
+      expect(body).not.toHaveProperty("temperature");
+    });
+
+    it("retries without reasoning_effort for non-reasoning models", async () => {
+      const fetchMock = stubFetch(
+        json({ error: { message: "Unrecognized request argument supplied: reasoning_effort" } }, 400),
+        json({ choices: [{ message: { content: ok } }] }),
+      );
+      await enrichStep(step, { ...settings, model: "gpt-4o" });
+      expect(bodyOf(fetchMock, 1)).not.toHaveProperty("reasoning_effort");
+    });
+  });
+
+  describe("gemini", () => {
+    const settings = { provider: "gemini", apiKey: "AIza-test" };
+
+    it("defaults to the Flash alias, asks for low thinking, and skips thought parts", async () => {
+      const fetchMock = stubFetch(json({ candidates: [{ content: { parts: [{ text: "hmm", thought: true }, { text: ok }] } }] }));
+      expect((await enrichStep(step, settings)).title).toBe("Click Save");
+      expect(fetchMock.mock.calls[0][0]).toContain("/models/gemini-flash-latest:generateContent");
+      const { generationConfig } = bodyOf(fetchMock);
+      expect(generationConfig.thinkingConfig).toEqual({ thinkingLevel: "low" });
+      expect(generationConfig).not.toHaveProperty("temperature");
+    });
+
+    it("retries without a thinking config the model doesn't accept", async () => {
+      const fetchMock = stubFetch(
+        json({ error: { message: 'Invalid JSON payload received. Unknown name "thinkingLevel"' } }, 400),
+        json({ candidates: [{ content: { parts: [{ text: ok }] } }] }),
+      );
+      await enrichStep(step, { ...settings, model: "gemini-2.5-flash" });
+      expect(bodyOf(fetchMock, 1).generationConfig).not.toHaveProperty("thinkingConfig");
+    });
+  });
+
+  describe("openrouter", () => {
+    it("defaults to the Haiku alias with low, hidden reasoning", async () => {
+      const fetchMock = stubFetch(json({ choices: [{ message: { content: ok } }] }));
+      await enrichStep(step, { provider: "openrouter", apiKey: "sk-or" });
+      expect(bodyOf(fetchMock)).toMatchObject({
+        model: "~anthropic/claude-haiku-latest",
+        reasoning: { effort: "low", exclude: true },
+      });
+    });
   });
 });

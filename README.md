@@ -17,6 +17,7 @@ guidr-extension/
 ├── llm.js                 LLM enrichment (Anthropic, OpenAI, Gemini, OpenRouter)
 ├── draft.js               Template step text used before (or without) AI enrichment
 ├── openrouter.js          "Connect OpenRouter" sign-in (OAuth PKCE)
+├── models.js              Live model lists and per-step price estimates for Settings
 ├── db.js                  IndexedDB wrapper (sessions + steps + recordings + GIF cache)
 ├── export.js              Export to Markdown, HTML, Intercom allowlist HTML, raw JSON
 ├── vendor/
@@ -67,7 +68,11 @@ Or bring your own API key for whichever provider you prefer:
 | Google Gemini | <https://aistudio.google.com/apikey> |
 | OpenRouter | <https://openrouter.ai/keys> |
 
-Pick the provider and model in ⚙️ Settings. Cost per guide varies by provider, model, and screenshot count — typically a few cents to a few tens of cents.
+Pick the provider and model in ⚙️ Settings. The model list comes live from the provider (the models your key can use that accept screenshots), so new models appear without an extension update. The estimated cost per step comes from OpenRouter's public price list.
+
+Defaults, used until you pick a model, are in `DEFAULT_MODELS` in `llm.js`. Where the provider maintains a moving alias, the default uses it (`gemini-flash-latest`, `~anthropic/claude-haiku-latest`), so it follows new releases on its own. Anthropic (`claude-haiku-4-5`) and OpenAI (`gpt-6-luna`) don't offer such an alias for their small models, so those two need a bump when a new generation ships.
+
+Requests send only the settings each model needs, plus the lowest reasoning effort the provider offers. If a model rejects one of those optional settings, the request is retried without it, so a new model generation doesn't break enrichment.
 
 ---
 
