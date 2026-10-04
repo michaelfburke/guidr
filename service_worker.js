@@ -252,13 +252,13 @@ async function handleEnrichStep({ stepId, sessionId, screenshotDataUrl }, sendRe
   const step = await db.getStep(stepId);
   const settings = await chrome.storage.local.get(["apiKey", "provider", "model", "openrouterModel", "toneGuide", "exampleGuides"]);
   if (!step) { sendResponse({ ok: false, error: "Step not found" }); return; }
-  if (!settings.apiKey) { sendResponse({ ok: false, error: "No API key configured. Add one in Settings to enrich steps." }); return; }
+  if (!settings.apiKey) { sendResponse({ ok: false, error: "No AI provider connected. Connect one in Settings to rewrite steps." }); return; }
 
   try {
     // Defensive: existing installs where the options page was never
     // explicitly opened may have apiKey set but provider undefined. The
-    // default matches options/main.js (state.provider = "gemini").
-    if (!settings.provider) settings.provider = "gemini";
+    // default matches options/main.js (state.provider = "openrouter").
+    if (!settings.provider) settings.provider = "openrouter";
     if (settings.provider === "openrouter" && settings.openrouterModel) {
       settings.model = settings.openrouterModel;
     }

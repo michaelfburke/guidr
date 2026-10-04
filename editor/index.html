@@ -11,15 +11,15 @@
       --s1:      #111118;
       --s2:      #17171f;
       --s3:      #1f1f2a;
-      --border:  #222230;
-      --border2: #2b2b3a;
+      --border:  #2c2c3c;
+      --border2: #3d3d52;
       --accent:  #7c6af7;
       --accentd: rgba(124,106,247,0.15);
       --success: #34d399;
       --error:   #f87171;
       --warn:    #fbbf24;
       --text:    #dedee8;
-      --muted:   #64647a;
+      --muted:   #8f8fa6;
       --font:    'Syne', system-ui, sans-serif;
       --mono:    'JetBrains Mono', monospace;
     }
@@ -42,13 +42,6 @@
       border-bottom: 1px solid var(--border);
       flex-shrink: 0; background: var(--s1);
     }
-    .logo {
-      font-size: 15px; font-weight: 700; color: #fff; letter-spacing: -0.5px;
-      background: none; border: none; cursor: default; padding: 0;
-      font-family: var(--font); display: inline-flex; align-items: center;
-      flex-shrink: 0; user-select: none;
-    }
-    .logo em { color: var(--accent); font-style: normal; }
     .topbar-divider { width: 1px; height: 18px; background: var(--border2); flex-shrink: 0; margin: 0 2px; }
     .topbar-name {
       flex: 1; min-width: 0;
@@ -72,7 +65,7 @@
     /* Overflow menus */
     .overflow-wrap { position: relative; }
     .overflow-btn {
-      background: none; border: 1px solid var(--border2); color: var(--muted);
+      background: var(--s2); border: 1px solid var(--border2); color: var(--text);
       cursor: pointer; font-size: 18px; line-height: 1;
       padding: 5px 10px; border-radius: 6px; transition: all 0.13s; font-family: var(--font);
       display: inline-flex; align-items: center;
@@ -296,13 +289,13 @@
     .step-of { font-size: 12px; color: var(--muted); font-weight: 600; white-space: nowrap; }
     .step-nav { display: flex; gap: 4px; flex-shrink: 0; }
     .nav-btn {
-      background: none; border: 1px solid var(--border2); color: var(--muted);
+      background: var(--s2); border: 1px solid var(--border2); color: var(--text);
       cursor: pointer; font-size: 18px; line-height: 1;
       width: 32px; height: 32px; border-radius: 7px;
       display: flex; align-items: center; justify-content: center; transition: all 0.13s;
     }
     .nav-btn:hover:not(:disabled) { color: var(--text); border-color: var(--accent); background: var(--accentd); }
-    .nav-btn:disabled { opacity: 0.25; cursor: default; }
+    .nav-btn:disabled { opacity: 0.35; cursor: default; }
     .step-editor-body {
       flex: 1; overflow-y: auto; padding: 16px 20px 20px;
       display: flex; flex-direction: column; gap: 14px;
@@ -343,10 +336,10 @@
       cursor: pointer; transition: all 0.15s; white-space: nowrap;
     }
     .gen-btn:hover { background: var(--accent); color: #fff; }
-    .gen-btn:disabled { opacity: 0.4; cursor: default; }
+    .gen-btn:disabled { opacity: 0.45; cursor: default; }
     .gen-btn:disabled:hover { background: var(--accentd); color: var(--text); }
-    .gen-btn.secondary { background: none; border-color: var(--border2); color: var(--muted); }
-    .gen-btn.secondary:hover { background: var(--s3); color: var(--text); border-color: var(--border2); }
+    .gen-btn.secondary { background: var(--s2); border-color: var(--border2); color: var(--text); }
+    .gen-btn.secondary:hover { background: var(--s3); color: var(--text); border-color: var(--accent); }
     .gen-btn .ico { width: 13px; height: 13px; }
     .media-picker {
       display: flex; gap: 3px; padding: 3px;
@@ -489,14 +482,24 @@
       border-radius: 4px; padding: 1px 6px; font-family: var(--mono); font-size: 11px; color: var(--text);
     }
     .toast {
-      position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(12px);
+      position: fixed; bottom: 150px; left: 50%; transform: translateX(-50%) translateY(12px);
       background: var(--s2); border: 1px solid var(--border2); color: var(--text);
       border-radius: 9px; padding: 10px 18px; font-size: 12px; font-weight: 500;
       box-shadow: 0 8px 28px rgba(0,0,0,0.5); z-index: 200;
       opacity: 0; transition: opacity 0.2s, transform 0.2s; pointer-events: none;
       max-width: 420px; text-align: center;
     }
-    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+    .toast-action {
+      margin-left: 10px; background: none; border: none; padding: 0; cursor: pointer;
+      color: inherit; font: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 2px;
+    }
+    .ai-actions { display: flex; flex-direction: column; gap: 8px; }
+    .ai-actions .modal-btn { width: 100%; padding: 10px 16px; }
+    .ai-actions .modal-btn.link { background: none; border: none; color: var(--muted); text-decoration: underline; text-underline-offset: 2px; }
+    .ai-actions .modal-btn.link:hover { color: var(--text); }
+    .ai-status { font-size: 12px; color: var(--error); margin-top: 10px; }
+    .ai-status:empty { display: none; }
     .toast.error { background: rgba(248,113,113,0.12); border-color: rgba(248,113,113,0.4); color: var(--error); }
     .modal-backdrop {
       position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 150;
@@ -526,7 +529,10 @@
 
 <!-- Topbar -->
 <div class="topbar">
-  <span class="logo">Guidr<em>.</em></span>
+  <button class="btn-guides" id="guidesBtn" type="button" title="Open the Guidr panel with all your guides">
+    <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    All guides
+  </button>
   <div class="topbar-divider"></div>
   <input class="topbar-name" id="sessionName" type="text" placeholder="Guide name" autocomplete="off" spellcheck="false"/>
   <div class="topbar-right">
@@ -558,9 +564,9 @@
       </div>
     </div>
     <button class="btn-enrich-all" id="enrichAllTopBtn" type="button" hidden
-            title="Generate AI title and description for every step that doesn't have one yet">
+            title="AI rewrites the draft title and description of every step it hasn't rewritten yet">
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px"><path d="M12 3v3m0 12v3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1M3 12h3m12 0h3M5.6 18.4l2.1-2.1m8.6-8.6 2.1-2.1"/></svg>
-      <span id="enrichAllTopLabel">Enrich all</span>
+      <span id="enrichAllTopLabel">Rewrite all with AI</span>
     </button>
     <div class="export-wrap">
       <button class="btn-export" id="exportBtn" type="button" aria-haspopup="menu" aria-expanded="false">
@@ -671,11 +677,6 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
           </button>
           <div class="overflow-menu" id="stepMoreMenu">
-            <div class="menu-item" id="enrichAllBtn">
-              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3m0 12v3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1M3 12h3m12 0h3M5.6 18.4l2.1-2.1m8.6-8.6 2.1-2.1"/></svg>
-              Enrich all steps with AI
-            </div>
-            <div class="sep"></div>
             <div class="menu-item danger" id="deleteStepBtn">
               <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
               Delete step
@@ -684,9 +685,9 @@
         </div>
       </div>
       <div class="gen-row">
-        <button class="gen-btn" id="enrichOneBtn">
+        <button class="gen-btn" id="enrichOneBtn" type="button" title="AI rewrites this step's title and description from the screenshot (⌘/Ctrl+Enter)">
           <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3m0 12v3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1M3 12h3m12 0h3M5.6 18.4l2.1-2.1m8.6-8.6 2.1-2.1"/></svg>
-          Enrich with AI
+          Rewrite with AI
         </button>
         <button class="gen-btn secondary" id="openAnnotBtn">
           <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
@@ -765,13 +766,27 @@
     <div class="modal-body" style="margin-bottom:14px">
       <table class="kbd-table">
         <tr><td>Previous / Next step</td><td><span class="kbd">←</span> <span class="kbd">→</span></td></tr>
-        <tr><td>Enrich current step with AI</td><td><span class="kbd">⌘</span><span class="kbd">↵</span></td></tr>
+        <tr><td>Rewrite current step with AI</td><td><span class="kbd">⌘</span><span class="kbd">↵</span></td></tr>
         <tr><td>Close menus / modals</td><td><span class="kbd">Esc</span></td></tr>
         <tr><td>Annotation: callout / arrow / box / mask</td><td><span class="kbd">1</span>&nbsp;<span class="kbd">2</span>&nbsp;<span class="kbd">3</span>&nbsp;<span class="kbd">4</span></td></tr>
         <tr><td>Show this sheet</td><td><span class="kbd">?</span></td></tr>
       </table>
     </div>
     <div class="modal-actions"><button class="modal-btn primary" id="helpClose" type="button">Close</button></div>
+  </div>
+</div>
+
+<!-- AI setup modal: shown when Rewrite is clicked with no provider set up -->
+<div class="modal-backdrop" id="aiBackdrop" role="dialog" aria-modal="true" aria-labelledby="aiTitle">
+  <div class="modal-card" style="max-width:380px">
+    <div class="modal-title" id="aiTitle">Connect an AI provider to rewrite steps</div>
+    <div class="modal-body">Your steps already have draft text, and you can edit or export them as they are. To have AI rewrite them, connect a provider. You pay it directly, usually a few cents per guide.</div>
+    <div class="ai-actions">
+      <button class="modal-btn primary" id="aiConnectBtn" type="button">Connect OpenRouter</button>
+      <button class="modal-btn" id="aiOwnKeyBtn" type="button">Use my own API key</button>
+      <button class="modal-btn link" id="aiCancelBtn" type="button">Not now</button>
+    </div>
+    <div class="ai-status" id="aiStatus" role="status"></div>
   </div>
 </div>
 

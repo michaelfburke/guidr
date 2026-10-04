@@ -35,12 +35,13 @@ guidr-extension/
 1. `chrome://extensions` → enable **Developer mode**
 2. Click **Load unpacked** → select this folder
 3. Click the Guidr icon → opens side panel
-4. Optional: click **Connect OpenRouter** in the side panel (or paste your own key in ⚙️ Settings). Without AI, each step still gets a draft title and instruction.
-5. Navigate to any SaaS app, name your guide, hit **Start recording**
+4. Optional: switch on **Record voice narration** under the record button (the first time, Settings asks for the microphone).
+5. Optional: click **Connect OpenRouter** in the side panel (or paste your own key in ⚙️ Settings). Without AI, each step still gets a draft title and instruction.
+6. Navigate to any SaaS app and hit **Start recording**
    - First time only: Chrome will prompt for access to all sites. This is what lets Guidr screenshot the tab during recording. You can revoke it at any time from `chrome://extensions`.
-6. Click through the feature you want to document
-7. Hit **Stop recording** → **✦ Enrich all** to generate text
-8. Export as Markdown, HTML, or Intercom JSON
+7. Click through the feature you want to document
+8. Hit **Stop recording**. The guide opens in the editor with draft text; click **Rewrite all with AI** to have your provider rewrite it
+9. Export as Markdown, HTML, or Intercom HTML
 
 ### Packaging for the Chrome Web Store
 

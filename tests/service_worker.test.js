@@ -151,6 +151,6 @@ describe("service_worker recording state", () => {
     const { stepId } = await send(marker("Save"), { tab: { id: 7 } });
     const res = await send({ type: "SP_ENRICH_STEP", stepId });
     expect(res.ok).toBe(false);
-    expect(res.error).toMatch(/No API key/);
+    expect(res.error).toMatch(/No AI provider connected/);
   });
 });

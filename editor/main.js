@@ -3,6 +3,7 @@ import { db } from "../db.js";
 import { createAnnotator, renderAnnotated } from "../sidepanel/annotate.js";
 import { sw, escHtml, slugify, formatMs, formatBytes, formatApiError } from "../utils.js";
 import { makeReorderable } from "../sidepanel/reorder.js";
+import { connectOpenRouter } from "../openrouter.js";
 
 // ── Read session ID from URL ───────────────────────────────────────────────
 const sessionId = new URL(location.href).searchParams.get("session");
@@ -610,33 +611,87 @@ async function deleteStepAt(idx) {
   toast("Step deleted");
 }
 
-// ── AI enrichment ─────────────────────────────────────────────────────────
+// ── AI rewriting ("enrich" in code and messages) ──────────────────────────
+// With no key saved, Rewrite opens a setup dialog instead of failing: connect
+// OpenRouter right here, or go to Settings for a key. Resolves true once a
+// provider is connected, so the rewrite carries on.
+const aiBackdrop = $("aiBackdrop");
+let aiResolver = null;
+
+function closeAiSetup(result) {
+  aiBackdrop.classList.remove("open");
+  if (aiResolver) { aiResolver(result); aiResolver = null; }
+}
+
+async function ensureAiReady() {
+  const { apiKey } = await chrome.storage.local.get("apiKey");
+  if (apiKey) return true;
+  if (aiBackdrop.classList.contains("open")) return false;
+  $("aiStatus").textContent = "";
+  aiBackdrop.classList.add("open");
+  $("aiConnectBtn").focus();
+  return new Promise((resolve) => { aiResolver = resolve; });
+}
+
+$("aiConnectBtn").addEventListener("click", async () => {
+  const btn = $("aiConnectBtn");
+  btn.disabled = true;
+  $("aiStatus").textContent = "";
+  try {
+    if (await connectOpenRouter()) closeAiSetup(true);
+  } catch (err) {
+    $("aiStatus").textContent = err.message || String(err);
+  } finally {
+    btn.disabled = false;
+  }
+});
+$("aiOwnKeyBtn").addEventListener("click", () => {
+  closeAiSetup(false);
+  openSettings("provider");
+});
+$("aiCancelBtn").addEventListener("click", () => closeAiSetup(false));
+aiBackdrop.addEventListener("click", (e) => { if (e.target === aiBackdrop) closeAiSetup(false); });
+
+function openSettings(section) {
+  chrome.tabs.create({ url: chrome.runtime.getURL(`options/index.html#${section}`) });
+}
+
+// Key, billing and model problems are fixed in Settings: offer the way there.
+function aiErrorToast(raw) {
+  const fixable = /api key|key was rejected|isn't for|credits|model|no api key/i.test(formatApiError(raw));
+  errorToast(formatApiError(raw), 9000, fixable ? { label: "Open Settings", onClick: () => openSettings("provider") } : null);
+}
+
+let enrichOneRunning = false;
 $("enrichOneBtn").addEventListener("click", async () => {
   const step = steps[currentStepIdx];
-  if (!step) return;
+  if (!step || enrichOneRunning) return;
+  if (!(await ensureAiReady())) return;
+  enrichOneRunning = true;
   const btn = $("enrichOneBtn");
   const originalHtml = btn.innerHTML;
   btn.disabled = true;
-  btn.innerHTML = '<span class="spin"></span> Enriching…';
+  btn.innerHTML = '<span class="spin"></span> Rewriting…';
   let screenshotDataUrl = null;
   try { screenshotDataUrl = await extractFrame(step.tsMs); } catch {}
   const res = await sw({ type: "SP_ENRICH_STEP", stepId: step.id, sessionId, screenshotDataUrl });
   btn.disabled = false;
   btn.innerHTML = originalHtml;
-  if (res?.ok) { onStepEnriched(res.step); toast("Step enriched"); }
-  else errorToast(formatApiError(res?.error));
+  enrichOneRunning = false;
+  if (res?.ok) { onStepEnriched(res.step); toast("Step rewritten. Edit it freely."); }
+  else aiErrorToast(res?.error);
 });
 
 let enrichAllRunning = false;
 async function runEnrichAll() {
   if (enrichAllRunning) return;
-  stepMoreMenu.classList.remove("open");
   const pending = steps.filter(s => !s.enriched);
-  if (!pending.length) { toast("All steps are already enriched"); return; }
+  if (!pending.length) { toast("Every step has been rewritten"); return; }
+  if (!(await ensureAiReady())) return;
   enrichAllRunning = true;
   enrichAllTopBtn.setAttribute("aria-busy", "true");
   updateEnrichAllTopBtn();
-  toast(`Enriching ${pending.length} step${pending.length === 1 ? "" : "s"}…`, 4000);
+  toast(`Rewriting ${pending.length} step${pending.length === 1 ? "" : "s"}…`, 4000);
   let failed = null;
   for (const step of pending) {
     let screenshotDataUrl = null;
@@ -648,15 +703,13 @@ async function runEnrichAll() {
   enrichAllRunning = false;
   enrichAllTopBtn.removeAttribute("aria-busy");
   updateEnrichAllTopBtn();
-  if (failed) errorToast(formatApiError(failed));
-  else toast("All steps enriched");
+  if (failed) aiErrorToast(failed);
+  else toast("All steps rewritten");
 }
-$("enrichAllBtn").addEventListener("click", runEnrichAll);
 enrichAllTopBtn.addEventListener("click", runEnrichAll);
 
-// Surfaces the guide-level "Enrich all" action in the topbar whenever there
-// are steps still missing AI text, with a live count — so it isn't buried in
-// the per-step overflow menu.
+// The guide-level "Rewrite all" action shows in the topbar while some steps
+// still have draft text, with a live count once some are done.
 function updateEnrichAllTopBtn() {
   const unenriched = steps.filter(s => !s.enriched).length;
   if (!unenriched || enrichAllRunning) {
@@ -665,8 +718,8 @@ function updateEnrichAllTopBtn() {
   }
   enrichAllTopBtn.hidden = false;
   enrichAllTopLabel.textContent = unenriched === steps.length
-    ? "Enrich all"
-    : `Enrich ${unenriched}`;
+    ? "Rewrite all with AI"
+    : `Rewrite ${unenriched} more with AI`;
 }
 
 function onStepEnriched(step) {
@@ -903,6 +956,16 @@ function extractGifClip(startMs, endMs, fps) {
   extractChain = extractChain.then(job, job);
   return extractChain;
 }
+
+// ── All guides ─────────────────────────────────────────────────────────────
+// The guide list lives in the side panel. sidePanel.open() needs the click's
+// user gesture, so the window id is looked up in advance, not awaited.
+let currentWindowId = null;
+chrome.windows.getCurrent().then((w) => { currentWindowId = w?.id ?? null; }).catch(() => {});
+$("guidesBtn").addEventListener("click", () => {
+  if (currentWindowId == null) return;
+  chrome.sidePanel.open({ windowId: currentWindowId }).catch((err) => console.warn("[Guidr] Could not open side panel:", err));
+});
 
 // ── Session name auto-save ────────────────────────────────────────────────
 let sessionNameSaveTimer;
@@ -1322,6 +1385,7 @@ const ANNOT_KEYS = { "1": "circle", "2": "arrow", "3": "highlight", "4": "mask" 
 document.addEventListener("keydown", (e) => {
   const isTyping = e.target.matches("textarea, input, select, [contenteditable]");
   if (e.key === "Escape") {
+    if (aiBackdrop.classList.contains("open"))      { closeAiSetup(false); return; }
     if (helpBackdrop.classList.contains("open"))    { closeHelp(); return; }
     if (exportMenu.classList.contains("open"))      { setExportMenuOpen(false); return; }
     if (stepMoreMenu.classList.contains("open"))    { stepMoreMenu.classList.remove("open"); return; }
@@ -1362,9 +1426,15 @@ function toast(msg, ms = 2600) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove("show"), ms);
 }
-function errorToast(msg, ms = 6000) {
+function errorToast(msg, ms = 6000, action = null) {
   const el = $("toast");
   el.textContent = msg; el.classList.add("show", "error");
+  if (action) {
+    const btn = document.createElement("button");
+    btn.className = "toast-action"; btn.type = "button"; btn.textContent = action.label;
+    btn.addEventListener("click", () => { el.classList.remove("show"); action.onClick(); });
+    el.appendChild(btn);
+  }
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove("show"), ms);
 }
