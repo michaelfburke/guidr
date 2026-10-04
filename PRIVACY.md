@@ -75,8 +75,21 @@ browser. It does not proxy or observe them.
 **When you click Generate script**, Guidr sends the guide's title and each
 step's generated title and voiceover text.
 
-**When you test your key or load the model list in Settings**, Guidr sends
-your API key to the provider to validate it and list available models.
+**When you click Connect OpenRouter**, Chrome opens OpenRouter's own sign-in
+page in a separate window. Guidr sees none of what you enter there. If you
+approve, OpenRouter returns a one-time code, which Guidr exchanges directly
+with `https://openrouter.ai` for an API key in your OpenRouter account. That
+key is stored and used exactly like a key you paste in, and you can revoke it
+from your OpenRouter dashboard.
+
+**When you test your key or open Settings**, Guidr sends your API key to the
+provider to validate it and list the models your account can use (refreshed
+at most once a day).
+
+**When you open Settings**, Guidr also downloads OpenRouter's public model and
+price list from `https://openrouter.ai/api/v1/models` (at most once a day) to
+show the estimated cost per step and the OpenRouter model list. This request
+carries no key, recording, or guide data.
 
 Your API key accompanies every provider request. The destination depends on
 your provider selection:
@@ -103,11 +116,14 @@ Guidr contacts no other network endpoint and does not load remote code.
 - `desktopCapture` — to record the tab, window, or screen you choose.
 - `offscreen` — to host microphone capture for narration (Chrome side panels
   cannot show the microphone permission prompt themselves).
-- `activeTab`, `tabs`, `scripting` — to inject the click-detail logic into
+- `activeTab`, `scripting` — to inject the click-detail logic into
   the tab you are recording, and re-inject it after the tab navigates.
 - `storage` — to remember your settings and guide list.
 - `sidePanel` — Guidr's UI is a side panel.
 - `downloads` — to save guides you export to disk.
+- `identity` — to open OpenRouter's sign-in window when you click Connect
+  OpenRouter, and receive the result. Not used for anything else; Guidr never
+  reads your Google account or Chrome profile.
 - Optional host access (`<all_urls>`) — requested the first time you record,
   so click details can be collected on whatever site you document, and when
   you add an example guide by URL. Granted by you, revocable at
@@ -119,8 +135,8 @@ Guidr contacts no other network endpoint and does not load remote code.
 - Clear all Guidr data: Settings → **Clear all Guidr data**, or remove the
   extension at `chrome://extensions`.
 - Revoke site access at any time from `chrome://extensions`.
-- Use Guidr with no API key: you can record and edit guides by hand, and
-  no data leaves your browser.
+- Use Guidr with no API key: every step gets a template title and
+  instruction you can edit by hand, and no data leaves your browser.
 
 ## Children
 

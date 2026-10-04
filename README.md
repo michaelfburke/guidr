@@ -15,6 +15,9 @@ guidr-extension/
 ├── content_script.js      Injected on demand by the SW during recording — captures clicks + DOM context
 ├── service_worker.js      Background SW — orchestrates capture, LLM, storage
 ├── llm.js                 LLM enrichment (Anthropic, OpenAI, Gemini, OpenRouter)
+├── draft.js               Template step text used before (or without) AI enrichment
+├── openrouter.js          "Connect OpenRouter" sign-in (OAuth PKCE)
+├── models.js              Live model lists and per-step price estimates for Settings
 ├── db.js                  IndexedDB wrapper (sessions + steps + recordings + GIF cache)
 ├── export.js              Export to Markdown, HTML, Intercom allowlist HTML, raw JSON
 ├── vendor/
@@ -32,7 +35,7 @@ guidr-extension/
 1. `chrome://extensions` → enable **Developer mode**
 2. Click **Load unpacked** → select this folder
 3. Click the Guidr icon → opens side panel
-4. Go to ⚙️ Settings → choose an LLM provider, paste your API key → Save
+4. Optional: click **Connect OpenRouter** in the side panel (or paste your own key in ⚙️ Settings). Without AI, each step still gets a draft title and instruction.
 5. Navigate to any SaaS app, name your guide, hit **Start recording**
    - First time only: Chrome will prompt for access to all sites. This is what lets Guidr screenshot the tab during recording. You can revoke it at any time from `chrome://extensions`.
 6. Click through the feature you want to document
@@ -54,7 +57,9 @@ resolves to a shipped file. Bump the version in both files before a release.
 
 ## LLM providers
 
-Guidr supports four providers. Bring your own API key for whichever you prefer:
+Guidr supports four providers. The quickest start is **Connect OpenRouter** in the side panel: sign in to OpenRouter, approve, and Guidr receives a key in your account. No copying, and one account covers Claude, GPT and Gemini models (default: `anthropic/claude-haiku-4.5`).
+
+Or bring your own API key for whichever provider you prefer:
 
 | Provider | Get a key |
 |---|---|
@@ -63,7 +68,11 @@ Guidr supports four providers. Bring your own API key for whichever you prefer:
 | Google Gemini | <https://aistudio.google.com/apikey> |
 | OpenRouter | <https://openrouter.ai/keys> |
 
-Pick the provider and model in ⚙️ Settings. Cost per guide varies by provider, model, and screenshot count — typically a few cents to a few tens of cents.
+Pick the provider and model in ⚙️ Settings. The model list comes live from the provider (the models your key can use that accept screenshots), so new models appear without an extension update. The estimated cost per step comes from OpenRouter's public price list.
+
+Defaults, used until you pick a model, are in `DEFAULT_MODELS` in `llm.js`. Where the provider maintains a moving alias, the default uses it (`gemini-flash-latest`, `~anthropic/claude-haiku-latest`), so it follows new releases on its own. Anthropic (`claude-haiku-4-5`) and OpenAI (`gpt-6-luna`) don't offer such an alias for their small models, so those two need a bump when a new generation ships.
+
+Requests send only the settings each model needs, plus the lowest reasoning effort the provider offers. If a model rejects one of those optional settings, the request is retried without it, so a new model generation doesn't break enrichment.
 
 ---
 

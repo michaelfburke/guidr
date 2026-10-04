@@ -22,6 +22,9 @@ function click(el, detail) {
 
 const markers = () => sendMessage.mock.calls.filter(([m]) => m.type === "GUIDR_CHAPTER_MARKER");
 
+// jsdom has no CSS.escape; Chrome does.
+globalThis.CSS ??= { escape: (s) => String(s).replace(/[^\w-]/g, "\\$&") };
+
 beforeEach(() => {
   document.body.innerHTML = `
     <button>Save</button>
@@ -105,6 +108,18 @@ describe("content_script chapter markers", () => {
     key(document.querySelector("input[type=checkbox]"), "Enter"); // Enter doesn't toggle
     key(document.querySelector("select"), "Enter");
     expect(markers()).toHaveLength(0);
+  });
+
+  it("describes form fields by their label or placeholder, never their value", () => {
+    document.body.insertAdjacentHTML("beforeend", `
+      <label for="fn">Full name</label><input id="fn" value="Jane Secret">
+      <input id="em" placeholder="you@company.com" value="jane@secret.test">
+      <label>Stage <select id="st"><option>Lead</option><option>Customer</option></select></label>
+      <input id="go" type="submit" value="Save contact">`);
+    for (const id of ["fn", "em", "st", "go"]) click(document.getElementById(id), 1);
+    const texts = markers().map(([m]) => m.payload.target.text);
+    expect(texts).toEqual(["Full name", "you@company.com", "Stage", "Save contact"]);
+    expect(JSON.stringify(markers())).not.toMatch(/Jane Secret|jane@secret/);
   });
 
   it("emits nothing after recording stops", () => {

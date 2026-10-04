@@ -20,7 +20,7 @@ export default [
 
   // Background service worker + content script + shared engine modules.
   {
-    files: ["service_worker.js", "content_script.js", "db.js", "llm.js", "export.js", "utils.js"],
+    files: ["service_worker.js", "content_script.js", "db.js", "draft.js", "llm.js", "models.js", "openrouter.js", "export.js", "utils.js"],
     languageOptions: {
       ecmaVersion: 2023,
       sourceType: "module",

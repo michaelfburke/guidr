@@ -16,6 +16,7 @@
 
 import { db } from "./db.js";
 import { enrichStep, generateFullScript } from "./llm.js";
+import { draftStep } from "./draft.js";
 
 // ─── Side panel ──────────────────────────────────────────────────────────────
 
@@ -200,8 +201,8 @@ async function handleChapterMarker({ payload }, sender, sendResponse) {
     target: payload.target,
     url: payload.url,
     pageTitle: payload.pageTitle,
-    title: null,
-    body: null,
+    // Template text so the guide reads sensibly without AI; enrichment replaces it.
+    ...draftStep(payload.target, payload.pageTitle),
     voiceoverScript: null,
     included: true,
     mediaMode: "screenshot",

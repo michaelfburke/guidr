@@ -16,8 +16,10 @@
  *    window rather than on every step.
  * 5. Gemini: responseMimeType:"application/json" guarantees structured output
  *    with no fence-stripping overhead.
- * 6. max_tokens capped at 400 — title+body+voiceover fit comfortably.
- * 7. temperature 0 everywhere for deterministic JSON.
+ * 6. Lowest reasoning effort each provider offers; output budgets leave room
+ *    for that reasoning (see "Shared request plumbing").
+ * 7. No sampling parameters: current reasoning models reject or discourage
+ *    them, and a 400 for an optional setting is retried without it.
  */
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -169,7 +171,17 @@ Describe what the user did and write the documentation step.`;
 
 // ─── Provider dispatch ────────────────────────────────────────────────────────
 
+function withModel(settings) {
+  if (!keyFitsProvider(settings.provider, settings.apiKey)) {
+    const name = PROVIDER_NAMES[settings.provider] || settings.provider;
+    throw new Error(`The saved API key isn't for ${name}. Add your ${name} key in Settings.`);
+  }
+  if (settings.provider === "openrouter" || modelBelongsTo(settings.provider, settings.model)) return settings;
+  return { ...settings, model: DEFAULT_MODELS[settings.provider] };
+}
+
 async function dispatch(settings, system, userText, screenshotDataUrl) {
+  settings = withModel(settings);
   switch (settings.provider) {
     case "anthropic":   return callAnthropic(settings, system, userText, screenshotDataUrl);
     case "openai":      return callOpenAI(settings, system, userText, screenshotDataUrl);
@@ -180,6 +192,7 @@ async function dispatch(settings, system, userText, screenshotDataUrl) {
 }
 
 async function dispatchText(settings, system, userText) {
+  settings = withModel(settings);
   switch (settings.provider) {
     case "anthropic":   return callAnthropicText(settings, system, userText);
     case "openai":      return callOpenAIText(settings, system, userText);
@@ -189,54 +202,118 @@ async function dispatchText(settings, system, userText) {
   }
 }
 
+// ─── Shared request plumbing ─────────────────────────────────────────────────
+//
+// Models come and go faster than releases of this extension, and each
+// generation changes which request settings it accepts (Claude Opus 4.7
+// dropped `temperature`; GPT reasoning models want `reasoning_effort`; Gemini 3
+// replaced thinking budgets with levels). So each request sends only what it
+// needs, plus a few *optional* settings that keep newer reasoning models fast
+// and cheap. When a model rejects one of those with a 400 naming it, the
+// request is retried with the setting's next alternative, or without it.
+
+/**
+ * @param {string} provider  – name for error messages
+ * @param {Array<[string, RegExp, ...any]>} optional – [dotted body path,
+ *   matcher for the 400 message, values to try next, in order]
+ */
+async function postJSON(provider, url, headers, body, optional = []) {
+  let pending = [...optional];
+  for (;;) {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify(body),
+    });
+    if (res.ok) return res.json();
+    const err = await httpError(res, provider);
+    const drop = res.status === 400 && pending.find(([path, re]) => hasPath(body, path) && re.test(err.message));
+    if (!drop) throw err;
+    const [path, re, next, ...rest] = drop;
+    pending = pending.filter((o) => o !== drop);
+    if (next === undefined) {
+      deletePath(body, path);
+    } else {
+      setPath(body, path, next);
+      pending.push([path, re, ...rest]);
+    }
+  }
+}
+
+function hasPath(obj, path) {
+  const keys = path.split(".");
+  const last = keys.pop();
+  const parent = keys.reduce((o, k) => o?.[k], obj);
+  return !!parent && last in parent;
+}
+
+function setPath(obj, path, value) {
+  const keys = path.split(".");
+  const last = keys.pop();
+  keys.reduce((o, k) => (o[k] ??= {}), obj)[last] = value;
+}
+
+function deletePath(obj, path) {
+  const keys = path.split(".");
+  const last = keys.pop();
+  const parent = keys.reduce((o, k) => o?.[k], obj);
+  if (parent) delete parent[last];
+  // Drop containers the deletion emptied, e.g. output_config: {}.
+  if (keys.length && parent && !Object.keys(parent).length) deletePath(obj, keys.join("."));
+}
+
+// Room for a short answer plus the reasoning that newer models do first even
+// at their lowest setting. Only tokens actually generated are billed.
+const STEP_MAX_TOKENS = 2048;
+const SCRIPT_MAX_TOKENS = 4096;
+
 // ─── Anthropic ────────────────────────────────────────────────────────────────
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
-const ANTHROPIC_DEFAULT_MODEL = "claude-haiku-4-5-20251001";
+// Undated alias: follows Haiku 4.5 snapshots. Settings offers the live list.
+const ANTHROPIC_DEFAULT_MODEL = "claude-haiku-4-5";
+const ANTHROPIC_OPTIONAL = [["output_config.effort", /effort/i]];
 
-function anthropicHeaders(apiKey) {
+export function anthropicHeaders(apiKey) {
   return {
-    "Content-Type": "application/json",
     "x-api-key": apiKey,
     "anthropic-version": "2023-06-01",
-    "anthropic-beta": "prompt-caching-2024-07-31",
+    // Required for CORS: without it the API rejects the preflight, so calls
+    // fail whenever the extension lacks host access to api.anthropic.com
+    // (fresh install, or the user declined site access).
+    "anthropic-dangerous-direct-browser-access": "true",
   };
 }
 
+// Newer Claude models think before answering, so the text isn't always the
+// first content block.
+const anthropicText = (data) => (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
+
 async function callAnthropic(settings, system, userText, screenshotDataUrl) {
-  const content = buildAnthropicContent(userText, screenshotDataUrl);
   const body = {
     model: settings.model || ANTHROPIC_DEFAULT_MODEL,
-    max_tokens: 400,
-    temperature: 0,
+    max_tokens: STEP_MAX_TOKENS,
+    // Lowest reasoning effort: a short, well-specified writing task. Models
+    // without effort support (e.g. Haiku 4.5) reject it and are retried.
+    output_config: { effort: "low" },
     // Prompt caching: system prompt is charged once per 5-min cache window
     system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
-    messages: [{ role: "user", content }],
+    messages: [{ role: "user", content: buildAnthropicContent(userText, screenshotDataUrl) }],
   };
-  const data = await anthropicFetch(body, settings.apiKey);
-  return parseJson(data.content?.[0]?.text || "");
+  const data = await postJSON("Anthropic", ANTHROPIC_URL, anthropicHeaders(settings.apiKey), body, ANTHROPIC_OPTIONAL);
+  return parseJson(anthropicText(data));
 }
 
 async function callAnthropicText(settings, system, userText) {
   const body = {
     model: settings.model || ANTHROPIC_DEFAULT_MODEL,
-    max_tokens: 800,
-    temperature: 0,
+    max_tokens: SCRIPT_MAX_TOKENS,
+    output_config: { effort: "low" },
     system,
     messages: [{ role: "user", content: userText }],
   };
-  const data = await anthropicFetch(body, settings.apiKey);
-  return data.content?.[0]?.text?.trim() || "";
-}
-
-async function anthropicFetch(body, apiKey) {
-  const res = await fetch(ANTHROPIC_URL, {
-    method: "POST",
-    headers: anthropicHeaders(apiKey),
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw await httpError(res, "Anthropic");
-  return res.json();
+  const data = await postJSON("Anthropic", ANTHROPIC_URL, anthropicHeaders(settings.apiKey), body, ANTHROPIC_OPTIONAL);
+  return anthropicText(data).trim();
 }
 
 // Build a rich error from a non-OK Response: preserves status, retry-after,
@@ -275,45 +352,33 @@ export function buildAnthropicContent(userText, screenshotDataUrl) {
 // ─── OpenAI ───────────────────────────────────────────────────────────────────
 
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
-const OPENAI_DEFAULT_MODEL = "gpt-4o-mini";
+// OpenAI has no "latest" alias for its small model; Settings offers the live list.
+const OPENAI_DEFAULT_MODEL = "gpt-6-luna";
+const OPENAI_OPTIONAL = [["reasoning_effort", /reasoning/i]];
 
 async function callOpenAI(settings, system, userText, screenshotDataUrl) {
-  const userContent = buildOpenAIContent(userText, screenshotDataUrl);
-  const data = await openAIFetch(
-    OPENAI_URL, settings.apiKey, {}, settings.model || OPENAI_DEFAULT_MODEL,
-    system, userContent, 400
-  );
+  const data = await openAIFetch(settings, system, buildOpenAIContent(userText, screenshotDataUrl), STEP_MAX_TOKENS);
   return parseJson(data.choices?.[0]?.message?.content || "");
 }
 
 async function callOpenAIText(settings, system, userText) {
-  const data = await openAIFetch(
-    OPENAI_URL, settings.apiKey, {}, settings.model || OPENAI_DEFAULT_MODEL,
-    system, userText, 800
-  );
+  const data = await openAIFetch(settings, system, userText, SCRIPT_MAX_TOKENS);
   return data.choices?.[0]?.message?.content?.trim() || "";
 }
 
-async function openAIFetch(url, apiKey, extraHeaders, model, system, userContent, maxTokens) {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-      ...extraHeaders,
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: maxTokens,
-      temperature: 0,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: userContent },
-      ],
-    }),
-  });
-  if (!res.ok) throw await httpError(res, url.includes("openrouter") ? "OpenRouter" : "OpenAI");
-  return res.json();
+function openAIFetch(settings, system, userContent, maxTokens) {
+  // No temperature: reasoning models only accept the default.
+  // max_completion_tokens is accepted by every chat model; max_tokens is not.
+  const body = {
+    model: settings.model || OPENAI_DEFAULT_MODEL,
+    max_completion_tokens: maxTokens,
+    reasoning_effort: "low",
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: userContent },
+    ],
+  };
+  return postJSON("OpenAI", OPENAI_URL, { Authorization: `Bearer ${settings.apiKey}` }, body, OPENAI_OPTIONAL);
 }
 
 export function buildOpenAIContent(userText, screenshotDataUrl) {
@@ -327,60 +392,44 @@ export function buildOpenAIContent(userText, screenshotDataUrl) {
 // ─── Google Gemini ────────────────────────────────────────────────────────────
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
-const GEMINI_DEFAULT_MODEL = "gemini-2.5-flash";
+// Google-maintained alias for the current Flash model.
+const GEMINI_DEFAULT_MODEL = "gemini-flash-latest";
+// Gemini 3 takes thinking levels; Gemini 2.5 rejects them and takes budgets
+// instead (0 turns thinking off; 2.5 Pro's minimum is 128). Without a cap,
+// thinking eats the output budget and truncates the JSON answer.
+const GEMINI_OPTIONAL = [["generationConfig.thinkingConfig", /thinking/i,
+  { thinkingBudget: 0 }, { thinkingBudget: 128 }]];
 
-// Gemini 2.5 models think by default, and those thinking tokens are charged
-// against maxOutputTokens — so a small budget gets consumed reasoning and the
-// actual answer is truncated to a few words (or empty). We don't need
-// reasoning for short structured JSON, so disable it where the API allows.
-// 2.5 Pro can't fully disable thinking (min budget 128); everything else can.
-function geminiThinkingConfig(model) {
-  return /2\.5-pro/.test(model || "") ? { thinkingBudget: 128 } : { thinkingBudget: 0 };
+// Thinking parts carry `thought: true`; keep only the answer.
+const geminiText = (data) =>
+  (data.candidates?.[0]?.content?.parts || []).filter((p) => !p.thought).map((p) => p.text || "").join("");
+
+function geminiFetch(settings, body) {
+  const model = settings.model || GEMINI_DEFAULT_MODEL;
+  // No temperature: Gemini 3 recommends the default and can loop below it.
+  body.generationConfig.thinkingConfig = { thinkingLevel: "low" };
+  return postJSON("Gemini", `${GEMINI_BASE}/${model}:generateContent?key=${settings.apiKey}`, {}, body, GEMINI_OPTIONAL);
 }
 
 async function callGemini(settings, system, userText, screenshotDataUrl) {
-  const parts = buildGeminiParts(userText, screenshotDataUrl);
-  const model = settings.model || GEMINI_DEFAULT_MODEL;
-  const body = {
+  const data = await geminiFetch(settings, {
     system_instruction: { parts: [{ text: system }] },
-    contents: [{ role: "user", parts }],
+    contents: [{ role: "user", parts: buildGeminiParts(userText, screenshotDataUrl) }],
     generationConfig: {
-      maxOutputTokens: 1024,
-      temperature: 0,
+      maxOutputTokens: STEP_MAX_TOKENS,
       responseMimeType: "application/json", // ← Gemini native structured output
-      thinkingConfig: geminiThinkingConfig(model),
     },
-  };
-  const res = await fetch(`${GEMINI_BASE}/${model}:generateContent?key=${settings.apiKey}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
   });
-  if (!res.ok) throw await httpError(res, "Gemini");
-  const data = await res.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-  return parseJson(text);
+  return parseJson(geminiText(data));
 }
 
 async function callGeminiText(settings, system, userText) {
-  const model = settings.model || GEMINI_DEFAULT_MODEL;
-  const body = {
+  const data = await geminiFetch(settings, {
     system_instruction: { parts: [{ text: system }] },
     contents: [{ role: "user", parts: [{ text: userText }] }],
-    generationConfig: {
-      maxOutputTokens: 2048,
-      temperature: 0,
-      thinkingConfig: geminiThinkingConfig(model),
-    },
-  };
-  const res = await fetch(`${GEMINI_BASE}/${model}:generateContent?key=${settings.apiKey}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    generationConfig: { maxOutputTokens: SCRIPT_MAX_TOKENS },
   });
-  if (!res.ok) throw await httpError(res, "Gemini");
-  const data = await res.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+  return geminiText(data).trim();
 }
 
 export function buildGeminiParts(userText, screenshotDataUrl) {
@@ -396,38 +445,58 @@ export function buildGeminiParts(userText, screenshotDataUrl) {
 // ─── OpenRouter ───────────────────────────────────────────────────────────────
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-// Sensible default: fast, cheap, vision-capable
-const OPENROUTER_DEFAULT_MODEL = "google/gemini-2.0-flash-001";
+// OpenRouter-maintained alias for Anthropic's current Haiku: fast, cheap,
+// vision-capable, good at short instructional copy.
+export const OPENROUTER_DEFAULT_MODEL = "~anthropic/claude-haiku-latest";
+const OPENROUTER_HEADERS = { "HTTP-Referer": "https://guidr.extension", "X-Title": "Guidr" };
 
 async function callOpenRouter(settings, system, userText, screenshotDataUrl) {
-  const userContent = buildOpenAIContent(userText, screenshotDataUrl); // same format
-  const data = await openAIFetch(
-    OPENROUTER_URL,
-    settings.apiKey,
-    {
-      "HTTP-Referer": "https://guidr.extension",
-      "X-Title": "Guidr",
-    },
-    settings.model || OPENROUTER_DEFAULT_MODEL,
-    system,
-    userContent,
-    400
-  );
+  const data = await openRouterFetch(settings, system, buildOpenAIContent(userText, screenshotDataUrl), STEP_MAX_TOKENS);
   return parseJson(data.choices?.[0]?.message?.content || "");
 }
 
 async function callOpenRouterText(settings, system, userText) {
-  const data = await openAIFetch(
-    OPENROUTER_URL,
-    settings.apiKey,
-    { "HTTP-Referer": "https://guidr.extension", "X-Title": "Guidr" },
-    settings.model || OPENROUTER_DEFAULT_MODEL,
-    system,
-    userText,
-    800
-  );
+  const data = await openRouterFetch(settings, system, userText, SCRIPT_MAX_TOKENS);
   return data.choices?.[0]?.message?.content?.trim() || "";
 }
+
+function openRouterFetch(settings, system, userContent, maxTokens) {
+  // OpenRouter translates `reasoning` per model and ignores it where unsupported.
+  const body = {
+    model: settings.model || OPENROUTER_DEFAULT_MODEL,
+    max_tokens: maxTokens,
+    reasoning: { effort: "low", exclude: true },
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: userContent },
+    ],
+  };
+  return postJSON("OpenRouter", OPENROUTER_URL,
+    { Authorization: `Bearer ${settings.apiKey}`, ...OPENROUTER_HEADERS }, body, [["reasoning", /reasoning/i]]);
+}
+
+// The saved model is one setting shared by all providers; only use it with
+// the provider it belongs to. (OpenRouter has its own openrouterModel.)
+const MODEL_PREFIX = { anthropic: /^claude-/, openai: /^(gpt-|o\d|chatgpt-)/, gemini: /^gemini-/ };
+export const modelBelongsTo = (provider, id) => !!id && !!MODEL_PREFIX[provider]?.test(id);
+
+// The API key is also one shared setting. Providers' key formats are
+// distinctive, so never send a key that is recognisably another provider's.
+const KEY_OWNER = [[/^sk-ant-/, "anthropic"], [/^sk-or-/, "openrouter"], [/^AIza/, "gemini"], [/^sk-/, "openai"]];
+export function keyFitsProvider(provider, key) {
+  const owner = KEY_OWNER.find(([re]) => re.test(key || ""))?.[1];
+  return !owner || owner === provider;
+}
+
+const PROVIDER_NAMES = { anthropic: "Anthropic", openai: "OpenAI", gemini: "Gemini", openrouter: "OpenRouter" };
+
+/** Model used when the user hasn't picked one, per provider. */
+export const DEFAULT_MODELS = {
+  anthropic: ANTHROPIC_DEFAULT_MODEL,
+  openai: OPENAI_DEFAULT_MODEL,
+  gemini: GEMINI_DEFAULT_MODEL,
+  openrouter: OPENROUTER_DEFAULT_MODEL,
+};
 
 // ─── JSON parser (resilient) ──────────────────────────────────────────────────
 
@@ -464,31 +533,3 @@ export function parseJson(raw) {
     voiceoverScript: (voice || body || "").trim(),
   };
 }
-
-// ─── Model lists (for options page) ──────────────────────────────────────────
-
-export const PROVIDER_MODELS = {
-  anthropic: [
-    { value: "claude-haiku-4-5-20251001",  label: "Claude Haiku (fast · cheap · recommended)" },
-    { value: "claude-sonnet-4-6",           label: "Claude Sonnet (balanced)" },
-    { value: "claude-opus-4-7",             label: "Claude Opus (highest quality)" },
-  ],
-  openai: [
-    { value: "gpt-4o-mini",  label: "GPT-4o Mini (fast · cheap · recommended)" },
-    { value: "gpt-4o",       label: "GPT-4o (higher quality)" },
-  ],
-  gemini: [
-    { value: "gemini-2.5-flash",       label: "Gemini 2.5 Flash (fast · cheap · recommended)" },
-    { value: "gemini-2.5-pro",         label: "Gemini 2.5 Pro (highest quality)" },
-    { value: "gemini-2.5-flash-lite",  label: "Gemini 2.5 Flash Lite (cheapest)" },
-    { value: "gemini-2.0-flash",       label: "Gemini 2.0 Flash (legacy)" },
-  ],
-  openrouter: [], // free-text model string in options
-};
-
-export const PROVIDER_KEY_URLS = {
-  anthropic:  "https://console.anthropic.com/settings/keys",
-  openai:     "https://platform.openai.com/api-keys",
-  gemini:     "https://aistudio.google.com/app/apikey",
-  openrouter: "https://openrouter.ai/keys",
-};

@@ -233,12 +233,12 @@
       gap: 6px; margin-top: 4px;
     }
     .setup-card .setup-btn {
-      background: var(--accent); color: #fff; border: none;
+      background: transparent; color: var(--accent); border: 1px solid var(--accent);
       border-radius: 9px; padding: 11px 14px;
       font-family: var(--font); font-size: 13px; font-weight: 700;
       cursor: pointer; transition: filter 0.15s, transform 0.1s;
     }
-    .setup-card .setup-btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+    .setup-card .setup-btn:hover { background: rgba(124,106,247,0.12); transform: translateY(-1px); }
     .setup-card .setup-skip {
       background: none; border: none; color: var(--muted);
       font-family: var(--font); font-size: 12px; font-weight: 500;
@@ -247,6 +247,9 @@
       text-decoration-color: var(--border2);
     }
     .setup-card .setup-skip:hover { color: var(--text); text-decoration-color: var(--text); }
+    .setup-card .setup-btn:disabled { opacity: 0.6; cursor: default; transform: none; }
+    .setup-card .setup-status { font-size: 12px; color: var(--error); line-height: 1.4; }
+    .setup-card .setup-status:empty { display: none; }
 
     /* ─── Shared utilities ──────────────────────────────────────────────── */
     .overflow-wrap { position: relative; }
@@ -351,20 +354,22 @@
      HOME VIEW
 ════════════════════════════════ -->
 <div class="view active" id="v-home">
-  <div class="setup-card" id="setupCard" style="display:none">
-    <span class="setup-eyebrow">Get started</span>
-    <strong>Add an API key to auto-write your guides</strong>
-    <p>Guidr writes step titles and bodies for you using your own provider key — Anthropic, OpenAI, Gemini, or OpenRouter. Setup takes about a minute. You can also skip this and write steps by hand.</p>
-    <div class="setup-actions">
-      <button class="setup-btn" id="goSetupBtn">Open Settings</button>
-      <button class="setup-skip" id="skipSetupBtn" type="button">Skip — I'll write steps manually</button>
-    </div>
-  </div>
-
   <button class="rec-btn" id="recBtn">
     <span class="rec-dot" id="recDot" style="display:none"></span>
     <span id="recLabel">Start recording</span>
   </button>
+
+  <div class="setup-card" id="setupCard" style="display:none">
+    <span class="setup-eyebrow">Optional</span>
+    <strong>Let AI write your steps</strong>
+    <p>Every click already gets a draft title. Connect an AI provider and Guidr rewrites each step into clear instructions in your tone. You pay the provider directly, usually a few cents per guide.</p>
+    <div class="setup-actions">
+      <button class="setup-btn" id="connectOpenRouterBtn" type="button">Connect OpenRouter</button>
+      <button class="setup-skip" id="goSetupBtn" type="button">Use my own API key instead</button>
+      <button class="setup-skip" id="skipSetupBtn" type="button">Not now</button>
+    </div>
+    <div class="setup-status" id="setupStatus" role="status"></div>
+  </div>
 
   <div id="captureSection" style="display:none">
     <div class="rec-status">

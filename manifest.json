@@ -11,10 +11,10 @@
     "scripting",
     "storage",
     "sidePanel",
-    "tabs",
     "downloads",
     "desktopCapture",
-    "offscreen"
+    "offscreen",
+    "identity"
   ],
 
   "optional_host_permissions": [

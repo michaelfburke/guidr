@@ -1,34 +1,8 @@
-// Cost estimates per 1000 tokens (USD) — rough, for display only
-const COST_MAP = {
-  "claude-haiku-4-5-20251001": { in: 0.00025, out: 0.00125, label: "~$0.002 / step" },
-  "claude-sonnet-4-6":         { in: 0.003,   out: 0.015,   label: "~$0.02 / step" },
-  "claude-opus-4-7":           { in: 0.015,   out: 0.075,   label: "~$0.08 / step" },
-  "gpt-4o-mini":               { in: 0.00015, out: 0.0006,  label: "~$0.001 / step" },
-  "gpt-4o":                    { in: 0.0025,  out: 0.01,    label: "~$0.015 / step" },
-  "gemini-2.5-flash":          { in: 0.0003,  out: 0.0025,  label: "~$0.001 / step" },
-  "gemini-2.5-flash-lite":     { in: 0.0001,  out: 0.0004,  label: "~$0.0005 / step" },
-  "gemini-2.5-pro":            { in: 0.00125, out: 0.01,    label: "~$0.012 / step" },
-  "gemini-2.0-flash":          { in: 0.0001,  out: 0.0004,  label: "~$0.001 / step" },
-};
+import { connectOpenRouter } from "../openrouter.js";
+import { DEFAULT_MODELS, modelBelongsTo, keyFitsProvider } from "../llm.js";
+import { listModels, cachedModels, estimateStepCost, normalizeModelId } from "../models.js";
 
-const MODEL_LISTS = {
-  anthropic: [
-    { value: "claude-haiku-4-5-20251001",  label: "Claude Haiku · fast · recommended" },
-    { value: "claude-sonnet-4-6",           label: "Claude Sonnet · balanced" },
-    { value: "claude-opus-4-7",             label: "Claude Opus · highest quality" },
-  ],
-  openai: [
-    { value: "gpt-4o-mini", label: "GPT-4o Mini · fast · recommended" },
-    { value: "gpt-4o",      label: "GPT-4o · higher quality" },
-  ],
-  gemini: [
-    { value: "gemini-2.5-flash",       label: "Gemini 2.5 Flash · fast · recommended" },
-    { value: "gemini-2.5-pro",         label: "Gemini 2.5 Pro · highest quality" },
-    { value: "gemini-2.5-flash-lite",  label: "Gemini 2.5 Flash Lite · cheapest" },
-    { value: "gemini-2.0-flash",       label: "Gemini 2.0 Flash · legacy" },
-  ],
-  openrouter: [],
-};
+const PROVIDER_LABELS = { anthropic: "an Anthropic", openai: "an OpenAI", gemini: "a Gemini", openrouter: "an OpenRouter" };
 
 const KEY_URLS = {
   anthropic:  "https://console.anthropic.com/settings/keys",
@@ -53,8 +27,8 @@ const BRAND_DEFAULTS = {
 let state = {
   provider: "gemini",
   apiKey: "",
-  model: "gemini-2.5-flash",
-  openrouterModel: "google/gemini-2.0-flash-001",
+  model: DEFAULT_MODELS.gemini,
+  openrouterModel: DEFAULT_MODELS.openrouter,
   toneGuide: "",
   exampleGuides: [],
   screenshotQuality: 72,
@@ -146,52 +120,112 @@ function setProvider(p, _updateInput = true) {
   document.getElementById("keyLink").href = KEY_URLS[p] || "#";
   document.getElementById("keyLink").textContent = `Get ${p.charAt(0).toUpperCase() + p.slice(1)} key`;
   document.getElementById("apiKey").placeholder = KEY_PLACEHOLDERS[p] || "API key…";
-  // Model select
-  const models = MODEL_LISTS[p] || [];
-  const sel = document.getElementById("modelSelect");
-  sel.innerHTML = "";
-  if (models.length) {
-    models.forEach((m) => {
-      const opt = document.createElement("option");
-      opt.value = m.value; opt.textContent = m.label;
-      sel.appendChild(opt);
-    });
-    const valid = models.some((m) => m.value === state.model);
-    sel.value = valid ? state.model : models[0].value;
-    state.model = sel.value;
-    sel.style.display = "";
-    document.getElementById("openrouterModelRow").style.display = "none";
-  } else {
-    // OpenRouter: free text
-    sel.style.display = "none";
-    document.getElementById("openrouterModelRow").style.display = "";
-    document.getElementById("openrouterModel").value = state.openrouterModel || "";
+  document.getElementById("connectOpenRouterRow").style.display = p === "openrouter" ? "" : "none";
+  // Model picker: the provider's default right away, then the live list.
+  const isOpenRouter = p === "openrouter";
+  document.getElementById("modelSelect").style.display = isOpenRouter ? "none" : "";
+  document.getElementById("openrouterModelRow").style.display = isOpenRouter ? "" : "none";
+  if (isOpenRouter) {
+    document.getElementById("openrouterModel").value = state.openrouterModel || DEFAULT_MODELS.openrouter;
+  } else if (!modelBelongsTo(p, state.model)) {
+    state.model = DEFAULT_MODELS[p];
   }
+  cachedModels(p).then((cached) => { if (state.provider === p) renderModels(p, cached); });
+  refreshModels(p);
   updateCostEstimate();
+}
+
+
+const modelLabel = (m) => (m.label && m.label !== m.id ? `${m.label} · ${m.id}` : m.id);
+
+function renderModels(p, entry, error) {
+  const status = document.getElementById("modelStatus");
+  const models = entry?.models || [];
+  if (p === "openrouter") {
+    const list = document.getElementById("openrouterModels");
+    list.innerHTML = "";
+    for (const m of models) {
+      const opt = document.createElement("option");
+      opt.value = m.id; opt.textContent = m.label;
+      list.appendChild(opt);
+    }
+  } else {
+    const sel = document.getElementById("modelSelect");
+    const def = DEFAULT_MODELS[p];
+    // The default may be an undated alias of a listed snapshot
+    // (claude-haiku-4-5 vs claude-haiku-4-5-20251001): show it once.
+    const isDefault = (m) => normalizeModelId(m.id) === normalizeModelId(def);
+    const listed = models.find(isDefault);
+    // A saved snapshot of the default (e.g. the old dated Haiku id) is the
+    // same model: select the default entry rather than flag it unavailable.
+    if (isDefault({ id: state.model })) state.model = def;
+    const options = [{ id: def, text: `${listed ? `${listed.label} · ${def}` : def} · recommended` }];
+    for (const m of models) if (!isDefault(m)) options.push({ id: m.id, text: modelLabel(m) });
+    if (!options.some((o) => o.id === state.model)) {
+      options.push({ id: state.model, text: `${state.model} · not offered to your key` });
+    }
+    sel.innerHTML = "";
+    for (const o of options) {
+      const opt = document.createElement("option");
+      opt.value = o.id; opt.textContent = o.text;
+      sel.appendChild(opt);
+    }
+    sel.value = state.model;
+  }
+  if (error) {
+    status.className = "hint err";
+    status.textContent = `Couldn't load the model list: ${error.message}`;
+  } else if (models.length) {
+    status.className = "hint";
+    status.textContent = `${models.length} vision models available${p === "openrouter" ? "" : " to your key"} · updated daily`;
+  } else {
+    status.className = "hint";
+    status.textContent = state.apiKey && p !== "openrouter" && !keyFitsProvider(p, state.apiKey)
+      ? `Your saved key isn't for ${PROVIDER_LABELS[p].replace(/^an? /, "")}. Add one to see its models.`
+      : "Test your key to see every model your account can use.";
+  }
+}
+
+let modelsRequest = 0;
+async function refreshModels(p, { force = false } = {}) {
+  // The key is shared across providers: don't send one provider's key to another.
+  if (p !== "openrouter" && (!state.apiKey || !keyFitsProvider(p, state.apiKey))) return;
+  const req = ++modelsRequest;
+  try {
+    const entry = await listModels(p, state.apiKey, { force });
+    if (req === modelsRequest && state.provider === p) renderModels(p, entry);
+  } catch (e) {
+    if (req === modelsRequest && state.provider === p) renderModels(p, await cachedModels(p), e);
+  }
 }
 
 document.getElementById("modelSelect").addEventListener("change", () => {
   state.model = document.getElementById("modelSelect").value;
   updateCostEstimate();
 });
+document.getElementById("openrouterModel").addEventListener("change", updateCostEstimate);
 
-function updateCostEstimate() {
-  const model = state.model || document.getElementById("modelSelect").value;
-  const cost = COST_MAP[model];
+let costRequest = 0;
+async function updateCostEstimate() {
+  const model = state.provider === "openrouter" ? state.openrouterModel : state.model;
   const el = document.getElementById("costEst");
   const bar = document.getElementById("costBar");
-  if (cost) {
-    el.textContent = cost.label;
-    // Budget bar: 0 = green (cheap), 100 = red (expensive)
-    const vals = Object.values(COST_MAP).map(c => parseFloat(c.label.replace(/[^0-9.]/g,"")));
-    const max = Math.max(...vals);
-    const val = parseFloat(cost.label.replace(/[^0-9.]/g,""));
-    const pct = Math.round((val / max) * 100);
-    bar.style.width = pct + "%";
-    bar.style.background = pct < 33 ? "var(--success)" : pct < 66 ? "var(--warn)" : "var(--error)";
-  } else {
+  const req = ++costRequest;
+  let cost = null;
+  try { cost = await estimateStepCost(model); } catch {}
+  if (req !== costRequest) return;
+  if (cost == null) {
     el.textContent = "—";
+    el.title = "No public price found for this model";
+    bar.style.width = "0%";
+    return;
   }
+  el.textContent = `~$${Number(cost.toPrecision(2))} / step`;
+  el.title = "Estimate from OpenRouter's public price list: one screenshot and a short answer";
+  // Budget bar: full at 2¢ per step.
+  const pct = Math.max(4, Math.min(100, Math.round((cost / 0.02) * 100)));
+  bar.style.width = pct + "%";
+  bar.style.background = cost < 0.001 ? "var(--success)" : cost < 0.005 ? "var(--warn)" : "var(--error)";
 }
 
 // ── Key show/hide & test ───────────────────────────────────────────────────
@@ -207,31 +241,47 @@ document.getElementById("testKey").addEventListener("click", async () => {
   const p = state.provider;
   const st = document.getElementById("keyStatus");
   if (!key) { st.className="status err"; st.textContent="Enter a key first."; return; }
+  if (!keyFitsProvider(p, key)) {
+    st.className = "status err";
+    st.textContent = `That doesn't look like ${PROVIDER_LABELS[p]} key. Check the provider selected above.`;
+    return;
+  }
   st.className="status busy"; st.innerHTML='<span class="spinner"></span> Testing…';
 
   try {
-    let ok = false, errMsg = "";
-    if (p === "anthropic") {
-      const r = await fetch("https://api.anthropic.com/v1/messages", {
-        method:"POST", headers:{"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01"},
-        body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:5,messages:[{role:"user",content:"Hi"}]})
-      });
-      ok = r.ok; if (!ok) errMsg = (await r.json().catch(()=>({}))).error?.message || r.status;
-    } else if (p === "openai") {
-      const r = await fetch("https://api.openai.com/v1/models",{headers:{Authorization:`Bearer ${key}`}});
-      ok = r.ok; if (!ok) errMsg = (await r.json().catch(()=>({}))).error?.message || r.status;
-    } else if (p === "gemini") {
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
-      ok = r.ok; if (!ok) errMsg = (await r.json().catch(()=>({}))).error?.message || r.status;
-    } else if (p === "openrouter") {
-      const r = await fetch("https://openrouter.ai/api/v1/models",{headers:{Authorization:`Bearer ${key}`}});
-      ok = r.ok; if (!ok) errMsg = (await r.json().catch(()=>({}))).error?.message || r.status;
+    if (p === "openrouter") {
+      // OpenRouter's model list is public, so check the key itself.
+      const r = await fetch("https://openrouter.ai/api/v1/key", { headers: { Authorization: `Bearer ${key}` } });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error?.message || `HTTP ${r.status}`);
+    } else {
+      // Listing models proves the key works and refreshes the picker.
+      const entry = await listModels(p, key, { force: true });
+      if (state.provider === p) renderModels(p, entry);
     }
-    st.className = ok ? "status ok" : "status err";
-    st.textContent = ok ? "Key valid" : String(errMsg);
-    if (ok) autoSave({ apiKey: key }, "savedProvider");
-  } catch(e) {
+    st.className = "status ok";
+    st.textContent = "Key valid";
+    state.apiKey = key;
+    autoSave({ apiKey: key }, "savedProvider");
+  } catch (e) {
     st.className = "status err"; st.textContent = e.message;
+  }
+});
+
+document.getElementById("connectOpenRouter").addEventListener("click", async () => {
+  const btn = document.getElementById("connectOpenRouter");
+  const st = document.getElementById("keyStatus");
+  btn.disabled = true;
+  st.className = "status busy"; st.innerHTML = '<span class="spinner"></span> Waiting for OpenRouter…';
+  try {
+    if (!(await connectOpenRouter())) { st.className = "status"; st.textContent = ""; return; }
+    Object.assign(state, await chrome.storage.local.get(["provider", "apiKey", "openrouterModel"]));
+    applyState();
+    st.className = "status ok"; st.textContent = "Connected to OpenRouter";
+    flashSaved("savedProvider");
+  } catch (e) {
+    st.className = "status err"; st.textContent = e.message;
+  } finally {
+    btn.disabled = false;
   }
 });
 
@@ -534,8 +584,10 @@ document.getElementById("openrouterModel").addEventListener("input", (e) => {
 // API key — only persist on blur or after a successful Test.
 document.getElementById("apiKey").addEventListener("blur", () => {
   const key = document.getElementById("apiKey").value.trim();
-  if (!key) return;
+  if (!key || key === state.apiKey) return;
+  state.apiKey = key;
   autoSave({ apiKey: key }, "savedProvider");
+  refreshModels(state.provider, { force: true });
 });
 
 // Tone — debounced on input.
