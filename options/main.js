@@ -1,3 +1,5 @@
+import { connectOpenRouter } from "../openrouter.js";
+
 // Cost estimates per 1000 tokens (USD) — rough, for display only
 const COST_MAP = {
   "claude-haiku-4-5-20251001": { in: 0.00025, out: 0.00125, label: "~$0.002 / step" },
@@ -54,7 +56,7 @@ let state = {
   provider: "gemini",
   apiKey: "",
   model: "gemini-2.5-flash",
-  openrouterModel: "google/gemini-2.0-flash-001",
+  openrouterModel: "anthropic/claude-haiku-4.5",
   toneGuide: "",
   exampleGuides: [],
   screenshotQuality: 72,
@@ -146,6 +148,7 @@ function setProvider(p, _updateInput = true) {
   document.getElementById("keyLink").href = KEY_URLS[p] || "#";
   document.getElementById("keyLink").textContent = `Get ${p.charAt(0).toUpperCase() + p.slice(1)} key`;
   document.getElementById("apiKey").placeholder = KEY_PLACEHOLDERS[p] || "API key…";
+  document.getElementById("connectOpenRouterRow").style.display = p === "openrouter" ? "" : "none";
   // Model select
   const models = MODEL_LISTS[p] || [];
   const sel = document.getElementById("modelSelect");
@@ -232,6 +235,24 @@ document.getElementById("testKey").addEventListener("click", async () => {
     if (ok) autoSave({ apiKey: key }, "savedProvider");
   } catch(e) {
     st.className = "status err"; st.textContent = e.message;
+  }
+});
+
+document.getElementById("connectOpenRouter").addEventListener("click", async () => {
+  const btn = document.getElementById("connectOpenRouter");
+  const st = document.getElementById("keyStatus");
+  btn.disabled = true;
+  st.className = "status busy"; st.innerHTML = '<span class="spinner"></span> Waiting for OpenRouter…';
+  try {
+    if (!(await connectOpenRouter())) { st.className = "status"; st.textContent = ""; return; }
+    Object.assign(state, await chrome.storage.local.get(["provider", "apiKey", "openrouterModel"]));
+    applyState();
+    st.className = "status ok"; st.textContent = "Connected to OpenRouter";
+    flashSaved("savedProvider");
+  } catch (e) {
+    st.className = "status err"; st.textContent = e.message;
+  } finally {
+    btn.disabled = false;
   }
 });
 

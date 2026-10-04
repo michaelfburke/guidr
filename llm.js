@@ -399,8 +399,8 @@ export function buildGeminiParts(userText, screenshotDataUrl) {
 // ─── OpenRouter ───────────────────────────────────────────────────────────────
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-// Sensible default: fast, cheap, vision-capable
-const OPENROUTER_DEFAULT_MODEL = "google/gemini-2.0-flash-001";
+// Sensible default: fast, cheap, vision-capable, good at short instructional copy.
+export const OPENROUTER_DEFAULT_MODEL = "anthropic/claude-haiku-4.5";
 
 async function callOpenRouter(settings, system, userText, screenshotDataUrl) {
   const userContent = buildOpenAIContent(userText, screenshotDataUrl); // same format

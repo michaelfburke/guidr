@@ -1,5 +1,6 @@
 import { db } from "../db.js";
 import { ICONS } from "./icons.js";
+import { connectOpenRouter } from "../openrouter.js";
 import { sw, escHtml, timeAgo, formatMs, formatBytes, log } from "../utils.js";
 
 const $ = (id) => document.getElementById(id);
@@ -56,14 +57,27 @@ window.addEventListener("beforeunload", () => {
   }
 });
 
+// Recording never needs AI: steps get draft text either way. The card only
+// offers to connect a provider, and stays out of the way while recording.
 async function applyOnboardingState() {
   const { apiKey, onboardingSkipped } = await chrome.storage.local.get(["apiKey", "onboardingSkipped"]);
-  const hasKey = !!apiKey;
-  const cleared = hasKey || !!onboardingSkipped;
-  $("setupCard").style.display = cleared ? "none" : "";
-  recBtn.style.display         = cleared ? "" : "none";
+  const hidden = !!apiKey || !!onboardingSkipped || isRecording;
+  $("setupCard").style.display = hidden ? "none" : "";
 }
 
+$("connectOpenRouterBtn").addEventListener("click", async () => {
+  const btn = $("connectOpenRouterBtn");
+  const status = $("setupStatus");
+  btn.disabled = true;
+  status.textContent = "";
+  try {
+    if (await connectOpenRouter()) toast("OpenRouter connected. Use Enrich in the editor to write your steps.", 4000);
+  } catch (err) {
+    status.textContent = err.message || String(err);
+  } finally {
+    btn.disabled = false;
+  }
+});
 $("goSetupBtn").addEventListener("click", () => chrome.runtime.openOptionsPage());
 $("skipSetupBtn").addEventListener("click", async () => {
   await chrome.storage.local.set({ onboardingSkipped: true });
@@ -408,6 +422,7 @@ function showVoicePrepError(res) {
 let recStatusTimer = null;
 function setRecording(val) {
   isRecording = val;
+  applyOnboardingState();
   recBtn.classList.toggle("recording", val);
   recLabel.textContent = val ? "Stop recording" : "Start recording";
   recDot.style.display = val ? "" : "none";
@@ -460,14 +475,14 @@ function renderCaptureList() {
     const item = document.createElement("div");
     item.className = `capture-item${step.included === false ? " dropped" : ""}`;
     item.id = `cap-${step.id}`;
-    const rawLabel = step.target?.text || step.target?.ariaLabel || step.pageTitle || "Step";
-    const cleanLabel = String(rawLabel).replace(/\s+/g, " ").trim().slice(0, 40);
+    const rawLabel = step.title || `Clicked "${step.target?.text || step.target?.ariaLabel || step.pageTitle || "Step"}"`;
+    const cleanLabel = String(rawLabel).replace(/\s+/g, " ").trim().slice(0, 48);
     const number = step.index + 1;
     const dropTitle = step.included === false ? "Include in guide" : "Exclude from guide";
     item.innerHTML = `
       <div class="capture-num">${number}</div>
       <div class="capture-info">
-        <span>Clicked "${escHtml(cleanLabel)}"</span>
+        <span>${escHtml(cleanLabel)}</span>
         <span class="ts">${formatMs(step.tsMs)}</span>
       </div>
       <button class="capture-drop" data-id="${step.id}" title="${dropTitle}" aria-label="${dropTitle}">${step.included === false ? ICONS.rotateCcw : ICONS.x}</button>`;

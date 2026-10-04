@@ -388,6 +388,10 @@
             <span><a class="link" id="keyLink" href="#" target="_blank">Get a key</a></span>
           </div>
           <div class="card-row-content">
+            <div id="connectOpenRouterRow" style="display:none;margin-bottom:8px">
+              <button class="btn btn-primary btn-sm" id="connectOpenRouter" type="button">Connect with OpenRouter</button>
+              <span style="margin-left:8px;font-size:11px;color:var(--muted)">Sign in and approve; no copying keys. Or paste one below.</span>
+            </div>
             <div class="input-group">
               <input type="password" id="apiKey" placeholder="Paste key here…" class="mono"/>
               <button class="btn btn-ghost btn-sm" id="toggleKey">Show</button>
@@ -405,7 +409,7 @@
           <div class="card-row-content">
             <select id="modelSelect"></select>
             <div style="margin-top:6px" id="openrouterModelRow" style="display:none">
-              <input type="text" id="openrouterModel" placeholder="e.g. google/gemini-2.0-flash-001"/>
+              <input type="text" id="openrouterModel" placeholder="e.g. anthropic/claude-haiku-4.5"/>
               <div style="margin-top:4px;font-size:11px;color:var(--muted)">
                 Browse models at <a class="link" href="https://openrouter.ai/models" target="_blank">openrouter.ai/models</a>
               </div>

@@ -7,7 +7,7 @@ export default defineConfig({
     include: ["tests/**/*.test.js"],
     coverage: {
       provider: "v8",
-      include: ["utils.js", "export.js", "llm.js", "db.js", "sidepanel/annotate.js"],
+      include: ["utils.js", "export.js", "llm.js", "db.js", "draft.js", "openrouter.js", "sidepanel/annotate.js"],
     },
   },
 });

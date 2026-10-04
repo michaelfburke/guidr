@@ -13,7 +13,8 @@
     "sidePanel",
     "downloads",
     "desktopCapture",
-    "offscreen"
+    "offscreen",
+    "identity"
   ],
 
   "optional_host_permissions": [

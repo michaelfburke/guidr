@@ -15,6 +15,8 @@ guidr-extension/
 ├── content_script.js      Injected on demand by the SW during recording — captures clicks + DOM context
 ├── service_worker.js      Background SW — orchestrates capture, LLM, storage
 ├── llm.js                 LLM enrichment (Anthropic, OpenAI, Gemini, OpenRouter)
+├── draft.js               Template step text used before (or without) AI enrichment
+├── openrouter.js          "Connect OpenRouter" sign-in (OAuth PKCE)
 ├── db.js                  IndexedDB wrapper (sessions + steps + recordings + GIF cache)
 ├── export.js              Export to Markdown, HTML, Intercom allowlist HTML, raw JSON
 ├── vendor/
@@ -32,7 +34,7 @@ guidr-extension/
 1. `chrome://extensions` → enable **Developer mode**
 2. Click **Load unpacked** → select this folder
 3. Click the Guidr icon → opens side panel
-4. Go to ⚙️ Settings → choose an LLM provider, paste your API key → Save
+4. Optional: click **Connect OpenRouter** in the side panel (or paste your own key in ⚙️ Settings). Without AI, each step still gets a draft title and instruction.
 5. Navigate to any SaaS app, name your guide, hit **Start recording**
    - First time only: Chrome will prompt for access to all sites. This is what lets Guidr screenshot the tab during recording. You can revoke it at any time from `chrome://extensions`.
 6. Click through the feature you want to document
@@ -54,7 +56,9 @@ resolves to a shipped file. Bump the version in both files before a release.
 
 ## LLM providers
 
-Guidr supports four providers. Bring your own API key for whichever you prefer:
+Guidr supports four providers. The quickest start is **Connect OpenRouter** in the side panel: sign in to OpenRouter, approve, and Guidr receives a key in your account. No copying, and one account covers Claude, GPT and Gemini models (default: `anthropic/claude-haiku-4.5`).
+
+Or bring your own API key for whichever provider you prefer:
 
 | Provider | Get a key |
 |---|---|

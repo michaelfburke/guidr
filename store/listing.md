@@ -24,12 +24,13 @@ Keep in sync with `manifest.json`, `PRIVACY.md`, and the README.
 >
 > HOW IT WORKS
 > • Record: pick a tab, window, or screen and click through your product. Narrate out loud if you like.
-> • Enrich: one click writes a title, body, and voiceover line for every step, in your brand's tone of voice.
+> • Draft: every click instantly becomes a step with a plain title and instruction, no setup needed.
+> • Enrich: one click rewrites every step with AI into a clear title, body, and voiceover line, in your brand's tone of voice.
 > • Edit: reorder steps, re-capture one, annotate screenshots with arrows, circles, highlights and masks, or swap a screenshot for a short GIF clip.
 > • Export: Markdown, a self-contained HTML page, Intercom-ready HTML on your clipboard, or raw JSON.
 >
 > BRING YOUR OWN AI
-> Use your own API key from Anthropic, OpenAI, Google Gemini, or OpenRouter. You choose the provider and model and pay them directly. A typical guide costs a few cents.
+> Connect OpenRouter in two clicks, or paste your own API key from Anthropic, OpenAI, or Google Gemini. You choose the provider and model and pay them directly. A typical guide costs a few cents. AI is optional: without it, you still get an editable step-by-step draft.
 >
 > PRIVATE BY DESIGN
 > Guidr has no server and no account. Recordings, narration, and guides stay in your browser. Nothing is sent anywhere until you click Enrich, and then only that step's screenshot and click details go straight to the AI provider you chose. No analytics, no tracking.
@@ -62,6 +63,7 @@ Keep in sync with `manifest.json`, `PRIVACY.md`, and the README.
 | `storage` | Saves the user's settings (AI provider, API key, tone guide, examples), the guide list, and the in-progress recording state so it survives the service worker being suspended. |
 | `sidePanel` | Guidr's main UI (start/stop recording, guide list) lives in the side panel. |
 | `downloads` | Saves exported guides (Markdown, HTML, JSON) to the user's disk. |
+| `identity` | Opens OpenRouter's sign-in page via launchWebAuthFlow when the user clicks "Connect OpenRouter", and receives the authorization code that is exchanged for the user's own OpenRouter API key. No Google account or profile data is read. |
 | Host permission `<all_urls>` (optional) | Requested at runtime the first time the user records, so click details can be captured on whichever site they are documenting; also requested for one origin when the user adds an example guide by URL. Not granted at install; revocable in chrome://extensions. |
 
 **Remote code:** No, I am not using remote code. All JavaScript is packaged with the extension; `vendor/gif.js` is a bundled local copy.
@@ -84,6 +86,7 @@ Keep in sync with `manifest.json`, `PRIVACY.md`, and the README.
 
 ## Before you submit
 
+- [ ] Click **Connect OpenRouter** with a real OpenRouter account and confirm the key arrives and Enrich works. (Automated run covers everything except OpenRouter's real sign-in page, which needs an account.)
 - [ ] Load the packaged zip unpacked in your own Chrome, on a fresh profile: the first Record click should show the site-access prompt *before* the mic prompt and screen picker, and steps should be captured. (Automated Chromium run of record → steps → SW restart → stop → editor → enrich passes, but it pre-grants site access, so it can't see that prompt.)
 - [ ] Screenshots and promo tile made
 - [ ] Version bumped in both `manifest.json` and `package.json`; `npm run package`; upload `dist/guidr-<version>.zip`

@@ -77,6 +77,14 @@ describe("service_worker recording state", () => {
     expect(sessionStore.size).toBe(0);
   });
 
+  it("gives captured steps draft text and leaves them unenriched", async () => {
+    await bootServiceWorker();
+    await start("Draft", 7);
+    await send(marker("Save contact"), { tab: { id: 7 } });
+    const { session } = await stop();
+    expect(session.steps[0]).toMatchObject({ title: "Click Save contact", body: 'Click "Save contact".', enriched: false });
+  });
+
   it("persists only session metadata, not steps", async () => {
     await bootServiceWorker();
     await start("Meta", 7);
