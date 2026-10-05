@@ -1,6 +1,6 @@
 # Guidr Privacy Policy
 
-_Last updated: 2026-10-03_
+_Last updated: 2026-10-05_
 
 Guidr is a Chrome extension that records you clicking through a web app and
 uses an AI provider you choose (Anthropic, OpenAI, Google Gemini, or
@@ -72,9 +72,6 @@ browser. It does not proxy or observe them.
   and the page URL and title.
 - Your tone-of-voice guide and example guides, if you added any.
 
-**When you click Generate script**, Guidr sends the guide's title and each
-step's generated title and voiceover text.
-
 **When you click Connect OpenRouter**, Chrome opens OpenRouter's own sign-in
 page in a separate window. Guidr sees none of what you enter there. If you
 approve, OpenRouter returns a one-time code, which Guidr exchanges directly
@@ -107,7 +104,7 @@ frames described above are.
 **When you add an example guide by URL in Settings**, Guidr asks for
 permission to access that site, then fetches the page (without cookies) to
 extract a text sample. The sample is stored locally and included in
-enrichment prompts as a style reference.
+rewrite prompts as a style reference.
 
 Guidr contacts no other network endpoint and does not load remote code.
 

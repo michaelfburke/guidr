@@ -42,6 +42,15 @@
       border-bottom: 1px solid var(--border);
       flex-shrink: 0; background: var(--s1);
     }
+    .btn-guides {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: var(--s2); border: 1px solid var(--border2); color: var(--text);
+      border-radius: 7px; padding: 6px 10px 6px 7px; cursor: pointer;
+      font-family: var(--font); font-size: 12px; font-weight: 600; flex-shrink: 0;
+      transition: border-color 0.12s;
+    }
+    .btn-guides:hover { border-color: var(--accent); }
+    .btn-guides .ico { width: 15px; height: 15px; }
     .topbar-divider { width: 1px; height: 18px; background: var(--border2); flex-shrink: 0; margin: 0 2px; }
     .topbar-name {
       flex: 1; min-width: 0;

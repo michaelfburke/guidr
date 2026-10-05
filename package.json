@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "package": "node scripts/package.js"
+    "package": "node scripts/package.js",
+    "build:privacy": "node scripts/build-privacy.js"
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",

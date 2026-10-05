@@ -26,7 +26,7 @@ Keep in sync with `manifest.json`, `PRIVACY.md`, and the README.
 > • Record: pick a tab, window, or screen and click through your product. Switch on narration to talk over it if you like.
 > • Draft: every click instantly becomes a step with a plain title and instruction, no setup needed.
 > • Rewrite with AI: one click rewrites every step into a clear title, body, and voiceover line, in your brand's tone of voice.
-> • Edit: reorder steps, re-capture one, annotate screenshots with arrows, circles, highlights and masks, or swap a screenshot for a short GIF clip.
+> • Edit: reorder steps, annotate screenshots with arrows, circles, highlights and masks, or swap a screenshot for a short GIF clip.
 > • Export: Markdown, a self-contained HTML page, Intercom-ready HTML on your clipboard, or raw JSON.
 >
 > BRING YOUR OWN AI
@@ -39,8 +39,9 @@ Keep in sync with `manifest.json`, `PRIVACY.md`, and the README.
 
 **Graphic assets:**
 - [x] Icon 128×128 (`icons/icon128.png`): 96×96 artwork, 16px transparent padding
-- [ ] Screenshots 1280×800 (3–5): recording in progress · editor with an enriched step · annotation tools · export menu · settings with provider picker
-- [ ] Small promo tile 440×280
+- [x] Screenshots 1280×800, in upload order: `store/assets/screenshot-1-record.png` (recording) · `-2-editor` (rewritten step) · `-3-annotate` · `-4-export` · `-5-settings`
+- [x] Small promo tile 440×280: `store/assets/promo-440x280.png`
+- Regenerate both after UI changes: `xvfb-run -a -s "-screen 0 1920x1080x24" node store/assets-src/make-assets.cjs` (needs Playwright with Chromium)
 
 **Homepage URL:** https://michaelfburke.github.io/guidr/ (GitHub Pages, `docs/`)
 **Support URL:** https://github.com/michaelfburke/guidr/issues
@@ -80,7 +81,7 @@ Keep in sync with `manifest.json`, `PRIVACY.md`, and the README.
 - [x] I do not use or transfer user data for purposes that are unrelated to my item's single purpose
 - [x] I do not use or transfer user data to determine creditworthiness or for lending purposes
 
-**Privacy policy URL:** https://github.com/michaelfburke/guidr/blob/main/PRIVACY.md (or a Pages copy at https://michaelfburke.github.io/guidr/privacy if you'd rather it not look like a code file)
+**Privacy policy URL:** https://michaelfburke.github.io/guidr/privacy/ (generated from PRIVACY.md by `npm run build:privacy`; CI fails if it falls out of date)
 
 ---
 
@@ -88,6 +89,6 @@ Keep in sync with `manifest.json`, `PRIVACY.md`, and the README.
 
 - [ ] Click **Connect OpenRouter** with a real OpenRouter account and confirm the key arrives and Rewrite with AI works. (Automated run covers everything except OpenRouter's real sign-in page, which needs an account.)
 - [ ] Load the packaged zip unpacked in your own Chrome, on a fresh profile: the first Record click should show the site-access prompt *before* the mic prompt and screen picker, and steps should be captured. (Automated Chromium run of record → steps → SW restart → stop → editor → rewrite passes, but it pre-grants site access, so it can't see that prompt.)
-- [ ] Screenshots and promo tile made
+- [x] Screenshots and promo tile made
 - [ ] Version bumped in both `manifest.json` and `package.json`; `npm run package`; upload `dist/guidr-<version>.zip`
 - [ ] Privacy policy URL loads (homepage confirmed live)

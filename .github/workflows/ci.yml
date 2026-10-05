@@ -32,5 +32,8 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: Privacy page matches PRIVACY.md
+        run: npm run build:privacy -- --check
+
       - name: Package extension
         run: npm run package

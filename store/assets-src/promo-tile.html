@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<!-- Chrome Web Store small promo tile, 440×280. Rendered by make-assets.cjs. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<link rel="stylesheet" href="../../fonts/fonts.css"/>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    width: 440px; height: 280px; overflow: hidden;
+    font-family: 'Syne', system-ui, sans-serif; color: #dedee8;
+    background:
+      radial-gradient(260px 200px at 82% 30%, rgba(124,106,247,0.35), transparent 70%),
+      radial-gradient(220px 160px at 10% 100%, rgba(124,106,247,0.18), transparent 70%),
+      #09090e;
+    display: flex; align-items: center; padding: 0 26px; gap: 22px;
+  }
+  .left { flex: 1; min-width: 0; }
+  .logo { font-size: 46px; font-weight: 700; color: #fff; letter-spacing: -1.5px; line-height: 1; }
+  .logo em { color: #7c6af7; font-style: normal; }
+  .tag { margin-top: 14px; font-size: 16px; font-weight: 700; line-height: 1.25; color: #fff; }
+  .sub { margin-top: 8px; font-size: 12px; color: #a9a9bf; line-height: 1.4; }
+  .steps { width: 164px; display: flex; flex-direction: column; gap: 8px; }
+  .step {
+    display: flex; align-items: center; gap: 9px;
+    background: #17171f; border: 1px solid #3d3d52; border-radius: 9px; padding: 9px 10px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+  }
+  .step:nth-child(2) { margin-left: 10px; }
+  .step:nth-child(3) { margin-left: 20px; border-color: #7c6af7; }
+  .num {
+    width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
+    background: rgba(124,106,247,0.2); color: #a89af9;
+    font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+  }
+  .step:nth-child(3) .num { background: #7c6af7; color: #fff; }
+  .lines { flex: 1; display: flex; flex-direction: column; gap: 5px; }
+  .t { font-size: 10px; font-weight: 700; color: #fff; white-space: nowrap; }
+  .b { height: 4px; border-radius: 2px; background: #3d3d52; width: 85%; }
+  .b.s { width: 60%; }
+</style>
+</head>
+<body>
+  <div class="left">
+    <div class="logo">Guidr<em>.</em></div>
+    <div class="tag">Click through it once.<br/>Get the how-to guide.</div>
+    <div class="sub">Every click becomes a step.</div>
+  </div>
+  <div class="steps">
+    <div class="step"><span class="num">1</span><div class="lines"><span class="t">Open Contacts</span><span class="b"></span></div></div>
+    <div class="step"><span class="num">2</span><div class="lines"><span class="t">Click New contact</span><span class="b s"></span></div></div>
+    <div class="step"><span class="num">3</span><div class="lines"><span class="t">Save the contact</span><span class="b"></span></div></div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<!-- Generated from PRIVACY.md by scripts/build-privacy.js. Edit PRIVACY.md, then run npm run build:privacy. -->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy – Guidr</title>
+  <meta name="description" content="What data the Guidr Chrome extension handles, where it is stored, and where it goes." />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root { --bg: #0d1117; --card: #161b22; --border: #30363d; --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.65; font-size: 16px; }
+    a { color: var(--accent); }
+    nav { display: flex; align-items: center; justify-content: space-between; padding: 0 1.25rem; height: 60px;
+      border-bottom: 1px solid var(--border); max-width: 100%; }
+    .logo { display: flex; align-items: center; gap: 0.5rem; font-weight: 700; color: var(--text); text-decoration: none; }
+    main { max-width: 760px; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+    h1 { font-size: 2rem; line-height: 1.2; margin-bottom: 0.5rem; }
+    h2 { font-size: 1.25rem; margin: 2.25rem 0 0.75rem; padding-top: 1.25rem; border-top: 1px solid var(--border); }
+    p, ul { margin-bottom: 1rem; }
+    ul { padding-left: 1.4rem; }
+    li { margin-bottom: 0.5rem; }
+    h1 + p em { color: var(--muted); font-style: normal; font-size: 0.9rem; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85em;
+      background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 0.1em 0.35em;
+      overflow-wrap: anywhere; }
+    footer { border-top: 1px solid var(--border); padding: 1.5rem 1.25rem; text-align: center; color: var(--muted); font-size: 0.875rem; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="../">
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
+      <rect width="22" height="22" rx="5" fill="#7c6af7"/>
+      <rect x="4" y="4" width="14" height="3" fill="white"/>
+      <rect x="4" y="4" width="3" height="14" fill="white"/>
+      <rect x="4" y="15" width="14" height="3" fill="white"/>
+      <rect x="11" y="10" width="7" height="3" fill="white"/>
+    </svg>
+    Guidr
+  </a>
+  <a href="../">← Back to Guidr</a>
+</nav>
+<main>
+<h1 id="guidr-privacy-policy">Guidr Privacy Policy</h1>
+<p><em>Last updated: 2026-10-05</em></p>
+<p>Guidr is a Chrome extension that records you clicking through a web app and uses an AI provider you choose (Anthropic, OpenAI, Google Gemini, or OpenRouter) to turn the recording into a step-by-step guide. This policy describes exactly what data the extension handles, where it lives, and where (if anywhere) it goes.</p>
+<h2 id="tl-dr">TL;DR</h2>
+<ul>
+  <li>Guidr has no server. The developer never sees your data.</li>
+  <li>Recordings live only in your browser, in extension-sandboxed storage.</li>
+  <li>Nothing leaves your browser until you click <strong>Rewrite with AI</strong>. Then the relevant step data is sent to the AI provider you selected, using the API key you provided.</li>
+  <li>Your API key is stored locally and only ever sent to that provider.</li>
+  <li>Uninstalling the extension or clicking <strong>Clear all Guidr data</strong> deletes everything.</li>
+</ul>
+<h2 id="what-guidr-captures">What Guidr captures</h2>
+<p>Only while you are actively recording a guide, and only after you start it:</p>
+<ul>
+  <li><strong>Screen video.</strong> When you start a recording, Chrome asks you to choose what to share — a browser tab, a window, or your entire screen. Guidr records a video of whatever you pick until you stop. Anything visible in the shared area is in the video, including text you type into forms. Choose a single tab and close anything sensitive before recording.</li>
+  <li><strong>Microphone narration (off unless you turn it on).</strong> Narration is recorded only after you allow the microphone in Settings and switch on <strong>Record voice narration</strong> in the side panel. Then your voice is recorded alongside the video until you stop. With it off, Guidr never opens the microphone.</li>
+  <li><strong>Click details.</strong> For each click (or keyboard activation of a button or link) in the recorded tab: the element's tag, id, CSS classes, visible text, ARIA label and role, placeholder, input type and name, link URL, a CSS selector, its position on screen, the viewport size, and the nearest page landmark.</li>
+  <li><strong>Page context.</strong> The page URL and document title at the moment of each click.</li>
+</ul>
+<p>Guidr does <strong>not</strong> record keystrokes as data, read form values, clipboard contents or cookies, or capture anything when you are not recording. (As noted above, the screen video shows whatever is on screen.)</p>
+<h2 id="what-guidr-stores-and-where">What Guidr stores, and where</h2>
+<p>All of this stays on your machine:</p>
+<ul>
+  <li><strong>API key, provider and model choice, tone-of-voice guide, example guides, and UI preferences:</strong> <code>chrome.storage.local</code> (sandboxed per extension, not synced to your Google account).</li>
+  <li><strong>Guide list</strong> (titles, step counts, timestamps): <code>chrome.storage.local</code>.</li>
+  <li><strong>The in-progress recording's step list:</strong> <code>chrome.storage.session</code> (in memory, cleared when the browser closes).</li>
+  <li><strong>Screen recordings, narration audio, step details, generated text, and cached GIFs:</strong> IndexedDB inside the extension.</li>
+</ul>
+<p>Guidr sends the developer no telemetry, analytics, crash reports, or recordings.</p>
+<h2 id="what-gets-sent-to-third-parties">What gets sent to third parties</h2>
+<p>Guidr makes network requests only for the actions below, directly from your browser. It does not proxy or observe them.</p>
+<p><strong>When you click Rewrite with AI on a step</strong> (or Rewrite all), Guidr sends to your chosen AI provider:</p>
+<ul>
+  <li>One still frame from the screen recording, taken at the moment of the click.</li>
+  <li>A summary of that step's click details (element type, text, label, role) and the page URL and title.</li>
+  <li>Your tone-of-voice guide and example guides, if you added any.</li>
+</ul>
+<p><strong>When you click Connect OpenRouter</strong>, Chrome opens OpenRouter's own sign-in page in a separate window. Guidr sees none of what you enter there. If you approve, OpenRouter returns a one-time code, which Guidr exchanges directly with <code>https://openrouter.ai</code> for an API key in your OpenRouter account. That key is stored and used exactly like a key you paste in, and you can revoke it from your OpenRouter dashboard.</p>
+<p><strong>When you test your key or open Settings</strong>, Guidr sends your API key to the provider to validate it and list the models your account can use (refreshed at most once a day).</p>
+<p><strong>When you open Settings</strong>, Guidr also downloads OpenRouter's public model and price list from <code>https://openrouter.ai/api/v1/models</code> (at most once a day) to show the estimated cost per step and the OpenRouter model list. This request carries no key, recording, or guide data.</p>
+<p>Your API key accompanies every provider request. The destination depends on your provider selection:</p>
+<ul>
+  <li>Anthropic — <code>https://api.anthropic.com</code></li>
+  <li>OpenAI — <code>https://api.openai.com</code></li>
+  <li>Google Gemini — <code>https://generativelanguage.googleapis.com</code> (the key is sent as a URL parameter, as Google's API requires)</li>
+  <li>OpenRouter — <code>https://openrouter.ai</code></li>
+</ul>
+<p>The provider's own privacy and data-retention policies apply to anything you send. Screen video and narration audio are never uploaded; only the single frames described above are.</p>
+<p><strong>When you add an example guide by URL in Settings</strong>, Guidr asks for permission to access that site, then fetches the page (without cookies) to extract a text sample. The sample is stored locally and included in rewrite prompts as a style reference.</p>
+<p>Guidr contacts no other network endpoint and does not load remote code.</p>
+<h2 id="permissions-and-why">Permissions, and why</h2>
+<ul>
+  <li><code>desktopCapture</code> — to record the tab, window, or screen you choose.</li>
+  <li><code>offscreen</code> — to host microphone capture for narration (Chrome side panels cannot show the microphone permission prompt themselves).</li>
+  <li><code>activeTab</code>, <code>scripting</code> — to inject the click-detail logic into the tab you are recording, and re-inject it after the tab navigates.</li>
+  <li><code>storage</code> — to remember your settings and guide list.</li>
+  <li><code>sidePanel</code> — Guidr's UI is a side panel.</li>
+  <li><code>downloads</code> — to save guides you export to disk.</li>
+  <li><code>identity</code> — to open OpenRouter's sign-in window when you click Connect OpenRouter, and receive the result. Not used for anything else; Guidr never reads your Google account or Chrome profile.</li>
+  <li>Optional host access (<code>&lt;all_urls&gt;</code>) — requested the first time you record, so click details can be collected on whatever site you document, and when you add an example guide by URL. Granted by you, revocable at <code>chrome://extensions</code> → Guidr → Site access.</li>
+</ul>
+<h2 id="your-controls">Your controls</h2>
+<ul>
+  <li>Delete an individual guide, its video, or its narration from the side panel.</li>
+  <li>Clear all Guidr data: Settings → <strong>Clear all Guidr data</strong>, or remove the extension at <code>chrome://extensions</code>.</li>
+  <li>Revoke site access at any time from <code>chrome://extensions</code>.</li>
+  <li>Use Guidr with no API key: every step gets a template title and instruction you can edit by hand, and no data leaves your browser.</li>
+</ul>
+<h2 id="children">Children</h2>
+<p>Guidr is not directed at children under 13 and the developer does not knowingly collect data from them. (Guidr does not collect data from anyone.)</p>
+<h2 id="changes-to-this-policy">Changes to this policy</h2>
+<p>If the data Guidr handles ever changes, this document will be updated and the "Last updated" date above will move forward. Material changes will also be noted in the extension's release notes.</p>
+<h2 id="contact">Contact</h2>
+<p>Questions: open an issue at &lt;https://github.com/michaelfburke/guidr/issues&gt;.</p>
+</main>
+<footer>
+  Questions about this policy? <a href="https://github.com/michaelfburke/guidr/issues">Open an issue on GitHub</a>.
+</footer>
+</body>
+</html>
