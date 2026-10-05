@@ -247,9 +247,14 @@ async function onRecBtnClick() {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
         video: {
+          // Without explicit limits Chrome captures desktop sources at a low
+          // default resolution, which blurs every step's screenshot.
           mandatory: {
             chromeMediaSource: "desktop",
             chromeMediaSourceId: streamId,
+            maxWidth: 2560,
+            maxHeight: 1600,
+            maxFrameRate: 30,
           },
         },
       });

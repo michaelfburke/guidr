@@ -64,6 +64,17 @@ export default [
     },
   },
 
+  // Store image generator: Node (CommonJS) driving Playwright; its callbacks
+  // run inside the extension's pages.
+  {
+    files: ["store/assets-src/**/*.cjs"],
+    languageOptions: {
+      ecmaVersion: 2023,
+      sourceType: "commonjs",
+      globals: { ...globals.node, ...globals.browser, chrome: "readonly" },
+    },
+  },
+
   // Test suite.
   {
     files: ["tests/**/*.js", "**/*.test.js", "vitest.config.js"],
