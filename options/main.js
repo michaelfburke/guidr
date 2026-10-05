@@ -3,6 +3,7 @@ import { DEFAULT_MODELS, modelBelongsTo, keyFitsProvider } from "../llm.js";
 import { listModels, cachedModels, estimateStepCost, normalizeModelId } from "../models.js";
 
 const PROVIDER_LABELS = { anthropic: "an Anthropic", openai: "an OpenAI", gemini: "a Gemini", openrouter: "an OpenRouter" };
+const PROVIDER_TITLES = { anthropic: "Anthropic", openai: "OpenAI", gemini: "Gemini", openrouter: "OpenRouter" };
 
 const KEY_URLS = {
   anthropic:  "https://console.anthropic.com/settings/keys",
@@ -25,7 +26,7 @@ const BRAND_DEFAULTS = {
   brandHighlightColor: "#fbbf24",
 };
 let state = {
-  provider: "gemini",
+  provider: "openrouter",
   apiKey: "",
   model: DEFAULT_MODELS.gemini,
   openrouterModel: DEFAULT_MODELS.openrouter,
@@ -63,6 +64,30 @@ function applyState() {
   updatePreview();
   estimateStorage();
   applyBrandingToInputs();
+  updateAiState();
+}
+
+// Connection summary at the top of the provider page.
+function updateAiState() {
+  const el = document.getElementById("aiState");
+  const text = document.getElementById("aiStateText");
+  const name = PROVIDER_TITLES[state.provider];
+  el.classList.remove("ok", "warn");
+  if (!state.apiKey) {
+    text.textContent = "Not connected. Steps keep their draft text until you connect a provider.";
+  } else if (!keyFitsProvider(state.provider, state.apiKey)) {
+    el.classList.add("warn");
+    text.textContent = `The saved key isn't for ${name}. Add your ${name} key below.`;
+  } else {
+    el.classList.add("ok");
+    text.textContent = `Connected to ${name}. Rewrite with AI is ready in the editor.`;
+  }
+  // Once connected, reconnecting is a secondary action.
+  const connected = !!state.apiKey && state.provider === "openrouter" && keyFitsProvider("openrouter", state.apiKey);
+  const btn = document.getElementById("connectOpenRouter");
+  btn.textContent = connected ? "Reconnect OpenRouter" : "Connect OpenRouter";
+  btn.classList.toggle("btn-primary", !connected);
+  btn.classList.toggle("btn-ghost", connected);
 }
 
 // ── Navigation ─────────────────────────────────────────────────────────────
@@ -89,20 +114,27 @@ if (location.hash) {
   if (document.getElementById(`section-${target}`)) showSection(target);
 }
 
-// "Back to guides" — reopens the Guidr side panel (where the guide list lives).
+// "Back to guides": the guide list lives in the side panel, which is usually
+// already open beside this tab, so opening it alone changes nothing visible.
+// Open it, then close Settings (everything here auto-saves) to land back on
+// the tab the user came from.
 // chrome.sidePanel.open() must be called synchronously inside the user gesture;
 // awaiting windows.getCurrent() first would consume the gesture and the call
-// would be rejected. So we cache the window id up front and call open()
-// without awaiting anything beforehand.
+// would be rejected. So we cache the window id up front.
 let currentWindowId = null;
 chrome.windows.getCurrent().then((w) => { currentWindowId = w?.id ?? null; }).catch(() => {});
 
-document.getElementById("backToGuides")?.addEventListener("click", (e) => {
+document.getElementById("backToGuides")?.addEventListener("click", async (e) => {
   e.preventDefault();
-  const opts = currentWindowId != null ? { windowId: currentWindowId } : {};
-  Promise.resolve(chrome.sidePanel.open(opts)).catch((err) => {
+  if (currentWindowId == null) return;
+  try {
+    await chrome.sidePanel.open({ windowId: currentWindowId });
+  } catch (err) {
     console.warn("[Guidr] Could not open side panel:", err);
-  });
+  }
+  // Closing the window's last tab would close the window, panel included.
+  const [tab, tabs] = await Promise.all([chrome.tabs.getCurrent(), chrome.tabs.query({ windowId: currentWindowId })]);
+  if (tab && tabs.length > 1) chrome.tabs.remove(tab.id);
 });
 
 // ── Provider cards ─────────────────────────────────────────────────────────
@@ -118,7 +150,7 @@ function setProvider(p, _updateInput = true) {
   });
   // Key link
   document.getElementById("keyLink").href = KEY_URLS[p] || "#";
-  document.getElementById("keyLink").textContent = `Get ${p.charAt(0).toUpperCase() + p.slice(1)} key`;
+  document.getElementById("keyLink").textContent = `Get ${PROVIDER_LABELS[p]} key`;
   document.getElementById("apiKey").placeholder = KEY_PLACEHOLDERS[p] || "API key…";
   document.getElementById("connectOpenRouterRow").style.display = p === "openrouter" ? "" : "none";
   // Model picker: the provider's default right away, then the live list.
@@ -133,6 +165,7 @@ function setProvider(p, _updateInput = true) {
   cachedModels(p).then((cached) => { if (state.provider === p) renderModels(p, cached); });
   refreshModels(p);
   updateCostEstimate();
+  updateAiState();
 }
 
 
@@ -259,9 +292,10 @@ document.getElementById("testKey").addEventListener("click", async () => {
       if (state.provider === p) renderModels(p, entry);
     }
     st.className = "status ok";
-    st.textContent = "Key valid";
+    st.textContent = "Key works and is saved";
     state.apiKey = key;
     autoSave({ apiKey: key }, "savedProvider");
+    updateAiState();
   } catch (e) {
     st.className = "status err"; st.textContent = e.message;
   }
@@ -464,7 +498,9 @@ micBtn?.addEventListener("click", async () => {
     // We don't need the stream — just the permission grant. Stop tracks
     // immediately so the OS mic indicator turns off.
     stream.getTracks().forEach((t) => t.stop());
-    setMicStatus("Microphone enabled — narration will record from the side panel.", "ok");
+    // Granting here is how the side panel's narration switch gets turned on.
+    await chrome.storage.local.set({ narrationEnabled: true });
+    setMicStatus("Microphone allowed. Narration is on; switch it off under the record button.", "ok");
   } catch (err) {
     console.warn(`[Guidr/options] mic getUserMedia failed: ${err?.name} — ${err?.message}`);
     if (err?.name === "NotAllowedError") {
@@ -545,6 +581,7 @@ document.getElementById("clearDataBtn").addEventListener("click", async () => {
     body: "All Guidr data has been removed from this browser.",
     confirmLabel: "OK",
   });
+  location.reload(); // show the cleared settings, not the ones still in memory
 });
 
 // ── Auto-save plumbing ─────────────────────────────────────────────────────
@@ -588,6 +625,7 @@ document.getElementById("apiKey").addEventListener("blur", () => {
   state.apiKey = key;
   autoSave({ apiKey: key }, "savedProvider");
   refreshModels(state.provider, { force: true });
+  updateAiState();
 });
 
 // Tone — debounced on input.

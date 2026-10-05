@@ -11,8 +11,8 @@
       --s1:      #111118;
       --s2:      #17171f;
       --s3:      #1f1f2a;
-      --border:  #222230;
-      --border2: #2b2b3a;
+      --border:  #2c2c3c;
+      --border2: #3d3d52;
       --accent:  #7c6af7;
       --accentd: rgba(124,106,247,0.15);
       --success: #34d399;
@@ -20,7 +20,7 @@
       --warn:    #fbbf24;
       --rec:     #f87171;
       --text:    #dedee8;
-      --muted:   #64647a;
+      --muted:   #8f8fa6;
       --font:    'Syne', system-ui, sans-serif;
       --mono:    'JetBrains Mono', monospace;
     }
@@ -71,15 +71,14 @@
       align-items: center;
     }
     .logo .back .ico { width: 16px; height: 16px; }
-    .logo:hover .back { color: var(--text); }
     .logo:hover .back { color: var(--accent); }
     .logo.has-back .back { display: inline-flex; }
     .logo.has-back .logo-text { display: none; }
     .topbar-right { display: flex; gap: 4px; flex-shrink: 0; }
-    .iBtn { background: none; border: 1px solid var(--border); cursor: pointer; color: var(--muted);
+    .iBtn { background: var(--s2); border: 1px solid var(--border2); cursor: pointer; color: var(--text);
       padding: 5px 10px; border-radius: 6px; font-size: 11px; font-weight: 600;
       letter-spacing: 0.04em; line-height: 1.2; transition: all 0.12s; }
-    .iBtn:hover { color: var(--text); background: var(--s3); }
+    .iBtn:hover { border-color: var(--accent); background: var(--s3); }
     .iBtn-icon { padding: 5px 9px; font-size: 13px; font-weight: 700; letter-spacing: 0; }
 
     /* ── Views ── */
@@ -196,6 +195,11 @@
       position: relative;
     }
     .session-card:hover { border-color: var(--accent); background: var(--s3); }
+    .session-card.flash { animation: cardFlash 1.6s ease-out; }
+    @keyframes cardFlash {
+      0%, 30% { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,106,247,0.45); background: var(--s3); }
+      100%    { box-shadow: 0 0 0 0 rgba(124,106,247,0); }
+    }
     .session-card-body { flex: 1; min-width: 0; }
     .session-card-body strong { display: block; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .session-card-body .meta { color: var(--muted); font-size: 11px; display: flex; align-items: center; gap: 6px; margin-top: 2px; }
@@ -208,10 +212,27 @@
     .size-badge.has-vid::before { content: "●"; color: var(--accent); font-size: 9px; }
     .size-badge.has-voice::before { content: "●"; color: var(--success); font-size: 9px; }
 
-    .session-card .overflow-btn {
-      opacity: 0; transition: opacity 0.15s;
+    .session-card .open-hint { color: var(--muted); font-size: 11px; font-weight: 600; white-space: nowrap; }
+    .session-card:hover .open-hint, .session-card:focus-visible .open-hint { color: var(--accent); }
+
+    /* Narration switch under the record button */
+    .narr-row {
+      display: flex; align-items: center; gap: 10px; margin-top: -6px;
+      background: none; border: none; padding: 2px 2px; cursor: pointer;
+      color: var(--text); font-family: var(--font); font-size: 12px; text-align: left;
     }
-    .session-card:hover .overflow-btn { opacity: 1; }
+    .narr-row .switch-track {
+      width: 28px; height: 16px; border-radius: 999px; background: var(--border2);
+      position: relative; transition: background 0.15s; flex-shrink: 0;
+    }
+    .narr-row .switch-thumb {
+      position: absolute; top: 2px; left: 2px; width: 12px; height: 12px;
+      border-radius: 50%; background: var(--text); transition: left 0.15s;
+    }
+    .narr-row[aria-checked="true"] .switch-track { background: var(--accent); }
+    .narr-row[aria-checked="true"] .switch-thumb { left: 14px; background: #fff; }
+    .narr-row .narr-sub { color: var(--muted); font-size: 11px; }
+    .narr-row:disabled { opacity: 0.5; cursor: default; }
     .empty-sessions { text-align: center; padding: 30px 16px; color: var(--muted); font-size: 13px; line-height: 1.55; }
     .empty-sessions strong { color: var(--text); font-weight: 600; }
 
@@ -226,14 +247,15 @@
       font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
       text-transform: uppercase; color: var(--accent);
     }
-    .setup-card strong { font-size: 14px; line-height: 1.35; color: var(--text); }
+    .setup-card > strong { font-size: 14px; line-height: 1.35; color: var(--text); }
     .setup-card p { font-size: 12px; color: var(--muted); line-height: 1.5; }
+    .setup-card p strong { color: var(--text); font-weight: 600; }
     .setup-card .setup-actions {
       align-self: stretch; display: flex; flex-direction: column;
       gap: 6px; margin-top: 4px;
     }
     .setup-card .setup-btn {
-      background: transparent; color: var(--accent); border: 1px solid var(--accent);
+      background: var(--accentd); color: var(--text); border: 1px solid var(--accent);
       border-radius: 9px; padding: 11px 14px;
       font-family: var(--font); font-size: 13px; font-weight: 700;
       cursor: pointer; transition: filter 0.15s, transform 0.1s;
@@ -346,7 +368,7 @@
     <span class="back" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></span><span class="logo-text">Guidr<em>.</em></span>
   </button>
   <div class="topbar-right">
-    <button class="iBtn" id="btn-options">Settings</button>
+    <button class="iBtn" id="btn-options" type="button">Settings</button>
   </div>
 </div>
 
@@ -359,10 +381,15 @@
     <span id="recLabel">Start recording</span>
   </button>
 
+  <button class="narr-row" id="narrToggle" type="button" role="switch" aria-checked="false">
+    <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+    <span>Record voice narration <span class="narr-sub" id="narrSub">· off</span></span>
+  </button>
+
   <div class="setup-card" id="setupCard" style="display:none">
     <span class="setup-eyebrow">Optional</span>
     <strong>Let AI write your steps</strong>
-    <p>Every click already gets a draft title. Connect an AI provider and Guidr rewrites each step into clear instructions in your tone. You pay the provider directly, usually a few cents per guide.</p>
+    <p>Every click already gets a draft title and description. Connect an AI provider and <strong>Rewrite with AI</strong> turns them into clear instructions in your tone. You pay the provider directly, usually a few cents per guide.</p>
     <div class="setup-actions">
       <button class="setup-btn" id="connectOpenRouterBtn" type="button">Connect OpenRouter</button>
       <button class="setup-skip" id="goSetupBtn" type="button">Use my own API key instead</button>
@@ -384,7 +411,7 @@
 
   <div id="sessionsSection">
     <div class="sessions-header">
-      <span>Recent guides</span>
+      <span>Your guides</span>
     </div>
     <div id="sessionsList"><div class="empty-sessions">No guides yet. Hit <strong>Start recording</strong>, walk through your product, then stop. Your guide appears here.</div></div>
   </div>

@@ -10,15 +10,15 @@
       --bg:       #09090e;
       --s1:       #111118;
       --s2:       #17171f;
-      --border:   #222230;
-      --border2:  #2b2b3a;
+      --border:   #2c2c3c;
+      --border2:  #3d3d52;
       --accent:   #7c6af7;
       --accent2:  #a89af9;
       --success:  #34d399;
       --error:    #f87171;
       --warn:     #fbbf24;
       --text:     #dddde8;
-      --muted:    #6b6b7e;
+      --muted:    #8f8fa6;
       --r:        10px;
       --font:     'Syne', system-ui, sans-serif;
       --mono:     'JetBrains Mono', monospace;
@@ -93,7 +93,20 @@
     nav a.nav-back:hover { border-color: var(--accent); background: var(--s2); }
     nav a.nav-back.active { color: var(--text); }
     nav a .ico { font-size: 15px; }
+    nav .nav-group {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--muted); padding: 14px 10px 6px;
+    }
     nav .spacer { flex: 1; }
+    .ai-state { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600;
+      padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border2); background: var(--s1); margin-bottom: 20px; }
+    .ai-state .dot { background: var(--muted); }
+    .ai-state.ok .dot { background: var(--success); }
+    .ai-state.warn { border-color: rgba(251,191,36,0.5); }
+    .ai-state.warn .dot { background: var(--warn); }
+    .connect-box { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 14px;
+      background: rgba(124,106,247,0.08); border: 1px solid rgba(124,106,247,0.35); border-radius: 8px; margin-bottom: 12px; }
+    .connect-box span { font-size: 12px; color: var(--muted); flex: 1; min-width: 180px; }
     nav .version { font-size: 11px; color: var(--muted); padding: 0 10px; }
 
     main { flex: 1; padding: 40px 48px; max-width: 680px; }
@@ -331,16 +344,19 @@
   <!-- ── Sidebar nav ── -->
   <nav>
     <div class="brand">Guidr<em>.</em></div>
-    <a href="#" class="nav-back" id="backToGuides" title="Open the Guidr panel with your guides">
+    <a href="#" class="nav-back" id="backToGuides" title="Close Settings and show your guides in the Guidr panel">
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><polyline points="15 18 9 12 15 6"/></svg>
       Back to guides
     </a>
-    <a href="#" class="active" data-section="provider">Provider</a>
+    <div class="nav-group">AI rewriting</div>
+    <a href="#" class="active" data-section="provider">AI provider</a>
     <a href="#" data-section="tone">Tone of voice</a>
-    <a href="#" data-section="examples">Examples</a>
-    <a href="#" data-section="recording">Recording</a>
-    <a href="#" data-section="branding">Branding</a>
-    <a href="#" data-section="advanced">Advanced</a>
+    <a href="#" data-section="examples">Example steps</a>
+    <div class="nav-group">Recording</div>
+    <a href="#" data-section="recording">Microphone</a>
+    <a href="#" data-section="branding">Annotation colors</a>
+    <div class="nav-group">Other</div>
+    <a href="#" data-section="advanced">Images &amp; storage</a>
     <div class="spacer"></div>
     <div class="version">v0.1.0</div>
   </nav>
@@ -350,8 +366,9 @@
 
     <!-- PROVIDER -->
     <section id="section-provider" class="active">
-      <div class="h2-row"><h2>LLM Provider</h2><span class="saved-msg" id="savedProvider">Saved</span></div>
-      <p class="page-desc">Choose your AI provider and paste your API key. Keys are stored locally and never leave your browser.</p>
+      <div class="h2-row"><h2>AI provider</h2><span class="saved-msg" id="savedProvider">Saved</span></div>
+      <p class="page-desc">Optional. Every step gets draft text without AI. Connect a provider and <strong>Rewrite with AI</strong> turns drafts into clear instructions from the screenshot. Your key is stored only in this browser and sent only to the provider you choose.</p>
+      <div class="ai-state" id="aiState" role="status"><span class="dot"></span><span id="aiStateText">Not connected</span></div>
 
       <div class="card">
         <div class="card-row" style="flex-direction:column;gap:12px">
@@ -390,9 +407,9 @@
             <span><a class="link" id="keyLink" href="#" target="_blank">Get a key</a></span>
           </div>
           <div class="card-row-content">
-            <div id="connectOpenRouterRow" style="display:none;margin-bottom:8px">
-              <button class="btn btn-primary btn-sm" id="connectOpenRouter" type="button">Connect with OpenRouter</button>
-              <span style="margin-left:8px;font-size:11px;color:var(--muted)">Sign in and approve; no copying keys. Or paste one below.</span>
+            <div class="connect-box" id="connectOpenRouterRow" style="display:none">
+              <button class="btn btn-primary" id="connectOpenRouter" type="button">Connect OpenRouter</button>
+              <span>Sign in or create an account and approve. No key to copy. Or paste a key below.</span>
             </div>
             <div class="input-group">
               <input type="password" id="apiKey" placeholder="Paste key here…" class="mono"/>
@@ -410,7 +427,7 @@
           </div>
           <div class="card-row-content">
             <select id="modelSelect"></select>
-            <div style="margin-top:6px" id="openrouterModelRow" style="display:none">
+            <div style="margin-top:6px;display:none" id="openrouterModelRow">
               <input type="text" id="openrouterModel" list="openrouterModels" placeholder="e.g. ~anthropic/claude-haiku-latest"/>
               <datalist id="openrouterModels"></datalist>
               <div style="margin-top:4px;font-size:11px;color:var(--muted)">
@@ -514,8 +531,8 @@
     <!-- BRANDING -->
     <!-- RECORDING -->
     <section id="section-recording">
-      <div class="h2-row"><h2>Recording</h2></div>
-      <p class="page-desc">Optional microphone narration. Grant once here — the permission sticks for the whole extension.</p>
+      <div class="h2-row"><h2>Microphone</h2></div>
+      <p class="page-desc">Optional voice narration, recorded alongside the screen. Allow the microphone once here; after that, turn narration on or off with the switch under the record button.</p>
 
       <div class="card">
         <div class="card-row">
@@ -525,7 +542,7 @@
           </div>
           <div class="card-row-content">
             <p style="margin:0 0 10px;font-size:12px;color:var(--muted);line-height:1.5">
-              Chrome side panels can't show the mic permission prompt directly. Granting here makes narration work from the side panel afterwards.
+              Chrome can't ask for the microphone from the side panel, so it asks here instead.
             </p>
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
               <button class="btn btn-primary btn-sm" id="enableMicBtn" type="button">Enable microphone</button>
@@ -540,7 +557,7 @@
     </section>
 
     <section id="section-branding">
-      <div class="h2-row"><h2>Branding</h2><span class="saved-msg" id="savedBranding">Saved</span></div>
+      <div class="h2-row"><h2>Annotation colors</h2><span class="saved-msg" id="savedBranding">Saved</span></div>
       <p class="page-desc">Customize the colors of the annotations drawn over your screenshots so they match your product's brand. Changes apply to new annotations.</p>
 
       <div class="branding-grid">
@@ -595,14 +612,14 @@
 
     <!-- ADVANCED -->
     <section id="section-advanced">
-      <div class="h2-row"><h2>Advanced</h2><span class="saved-msg" id="savedAdvanced">Saved</span></div>
-      <p class="page-desc">Fine-tune screenshot compression, storage, and video defaults.</p>
+      <div class="h2-row"><h2>Images &amp; storage</h2><span class="saved-msg" id="savedAdvanced">Saved</span></div>
+      <p class="page-desc">How screenshots are sent for AI rewriting, how much space your guides use, and clearing everything.</p>
 
       <div class="card">
         <div class="card-row">
           <div class="card-row-label">
             <strong>Image detail</strong>
-            <span>Lower detail = cheaper to enrich.</span>
+            <span>Lower detail costs less to rewrite.</span>
           </div>
           <div class="card-row-content">
             <div style="display:flex;align-items:center;gap:12px">
@@ -615,7 +632,7 @@
         <div class="card-row">
           <div class="card-row-label">
             <strong>Max image width</strong>
-            <span>Image resolution before enrichment.</span>
+            <span>Screenshot size sent to the AI.</span>
           </div>
           <div class="card-row-content">
             <select id="maxImageWidth">
@@ -632,7 +649,7 @@
         <div class="card-row">
           <div class="card-row-label">
             <strong>Storage</strong>
-            <span>IndexedDB usage</span>
+            <span>Space used in this browser</span>
           </div>
           <div class="card-row-content" id="storageInfo">
             <span style="color:var(--muted)">Calculating…</span>

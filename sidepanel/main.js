@@ -35,8 +35,9 @@ const captureList    = $("captureList");
 const sessionsList   = $("sessionsList");
 
 // ── Boot ───────────────────────────────────────────────────────────────────
-loadSessions();
+let sessionsLoaded = loadSessions();
 applyOnboardingState();
+applyNarrationState();
 
 // If the user accidentally closes the side panel mid-recording, kill the
 // stream cleanly so the OS doesn't keep capturing in the background.
@@ -71,7 +72,7 @@ $("connectOpenRouterBtn").addEventListener("click", async () => {
   btn.disabled = true;
   status.textContent = "";
   try {
-    if (await connectOpenRouter()) toast("OpenRouter connected. Use Enrich in the editor to write your steps.", 4000);
+    if (await connectOpenRouter()) toast("OpenRouter connected. Open a guide and click Rewrite with AI.", 4000);
   } catch (err) {
     status.textContent = err.message || String(err);
   } finally {
@@ -86,6 +87,64 @@ $("skipSetupBtn").addEventListener("click", async () => {
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && (changes.apiKey || changes.onboardingSkipped)) applyOnboardingState();
+  if (area === "local" && changes.narrationEnabled) applyNarrationState();
+  // Guides are renamed, edited and deleted in editor tabs too: keep the list in step.
+  if (area === "local" && changes.guidr_sessions) {
+    clearTimeout(sessionsReloadTimer);
+    sessionsReloadTimer = setTimeout(loadSessions, 150);
+  }
+  if (area === "session" && changes.highlightGuide?.newValue) highlightGuide(changes.highlightGuide.newValue);
+});
+let sessionsReloadTimer = null;
+
+// The editor's "All guides" button asks for its guide to be pointed out, so
+// the click visibly does something even when the panel was already open.
+// Read on load too, for when that click is what opened the panel.
+async function highlightGuide({ sessionId, at } = {}) {
+  if (!sessionId || Date.now() - at > 5000) return;
+  await sessionsLoaded;
+  const card = sessionsList.querySelector(`.session-card[data-id="${CSS.escape(sessionId)}"]`);
+  if (!card) return;
+  card.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  card.classList.remove("flash");
+  void card.offsetWidth; // restart the animation
+  card.classList.add("flash");
+}
+chrome.storage.session.get("highlightGuide").then(({ highlightGuide: h }) => highlightGuide(h)).catch(() => {});
+
+// ── Narration ──────────────────────────────────────────────────────────────
+// Narration is opt-in. Side panels can't show the mic prompt, so turning it on
+// without a grant sends the user to Settings, which grants and switches it on.
+async function micPermission() {
+  try { return (await navigator.permissions.query({ name: "microphone" })).state; }
+  catch { return "prompt"; }
+}
+
+// Installs from before the switch existed recorded narration whenever the mic
+// was granted, so an unset preference follows the grant.
+async function narrationWanted() {
+  const { narrationEnabled } = await chrome.storage.local.get("narrationEnabled");
+  const granted = (await micPermission()) === "granted";
+  return { on: (narrationEnabled ?? granted) && granted, granted };
+}
+
+async function applyNarrationState() {
+  const { on } = await narrationWanted();
+  $("narrToggle").setAttribute("aria-checked", on ? "true" : "false");
+  $("narrSub").textContent = on ? "· on" : "· off";
+}
+
+$("narrToggle").addEventListener("click", async () => {
+  const { on, granted } = await narrationWanted();
+  if (on) {
+    await chrome.storage.local.set({ narrationEnabled: false });
+  } else if (granted) {
+    await chrome.storage.local.set({ narrationEnabled: true });
+  } else {
+    chrome.tabs.create({ url: chrome.runtime.getURL("options/index.html#recording") });
+    toast("Allow the microphone in the Settings tab. Narration turns on once it's allowed.", 5000);
+  }
+  applyNarrationState();
 });
 
 chrome.runtime.onMessage.addListener((msg) => {
@@ -117,7 +176,7 @@ function showView(id) {
   $(id).classList.add("active");
   $("btn-home").classList.toggle("has-back", id !== "v-home");
   if (id === "v-home") {
-    loadSessions();
+    sessionsLoaded = loadSessions();
     currentSession = null;
     currentSessionId = null;
   }
@@ -143,17 +202,14 @@ async function onRecBtnClick() {
     // capture needs it (the side panel warns when markers are unavailable).
     try { await chrome.permissions.request({ origins: ["<all_urls>"] }); } catch {}
 
-    // Prepare the mic FIRST via the offscreen document. Side-panel
-    // getUserMedia can't show the permission prompt; offscreen docs with
-    // reason USER_MEDIA can. This call asks the offscreen doc to acquire the
-    // mic stream now — the prompt appears anchored to the focused tab.
-    // Soft failure: a denied or unavailable mic continues with video-only.
+    // Narration is opt-in and needs a mic grant made in Settings. Only then is
+    // the mic opened, in the offscreen document (side panels can't hold it).
+    // Soft failure: an unavailable mic continues with video only.
     voicePrepared = false;
-    const voicePrep = await sw({ type: "SP_VOICE_PREPARE" });
-    if (voicePrep?.ok) {
-      voicePrepared = true;
-    } else {
-      showVoicePrepError(voicePrep);
+    if ((await narrationWanted()).on) {
+      const voicePrep = await sw({ type: "SP_VOICE_PREPARE" });
+      if (voicePrep?.ok) voicePrepared = true;
+      else showVoicePrepError(voicePrep);
     }
 
     // First-run hint: show a coach toast before the picker opens so the user
@@ -365,6 +421,7 @@ async function finalizeRecording() {
 
   await sw({ type: "SP_STOP_RECORDING" });
   setRecording(false);
+  applyNarrationState();
   captureSection.style.display = "none";
   $("sessionsSection").style.display = "";
   loadSessions();
@@ -376,7 +433,7 @@ async function finalizeRecording() {
     // should know so they can re-record on an interactive page or add steps
     // manually in the editor.
     errorToast(
-      "Recording saved, but no steps were captured. Open the guide to add steps manually, or re-record on your product page.",
+      "Recording saved, but no clicks were captured, so the guide has no steps. Re-record on your product's page and click through it.",
       8000
     );
   }
@@ -400,13 +457,9 @@ function pickMimeType() {
 function showVoicePrepError(res) {
   const name = res?.error || "unknown";
   const message = res?.message || "";
-  console.warn(`[Guidr] voice prepare failed: ${name} — ${message}`);
   if (name === "NotAllowedError") {
-    errorToast(
-      "Microphone not granted. Open Settings → Recording → Enable microphone, then try again. " +
-      "Recording without narration.",
-      10000
-    );
+    errorToast("Microphone access was removed, so this recording has no narration. Turn narration on again to re-allow it.", 8000);
+    chrome.storage.local.set({ narrationEnabled: false });
   } else if (name === "NotFoundError") {
     toast("No microphone detected. Recording without narration.");
   } else if (name === "NotReadableError") {
@@ -426,6 +479,7 @@ function setRecording(val) {
   recBtn.classList.toggle("recording", val);
   recLabel.textContent = val ? "Stop recording" : "Start recording";
   recDot.style.display = val ? "" : "none";
+  $("narrToggle").disabled = val;
   if (val) {
     updateRecStatus();
     recStatusTimer = setInterval(updateRecStatus, 1000);
@@ -518,6 +572,10 @@ async function loadSessions() {
   list.slice(0, 12).forEach(s => {
     const card = document.createElement("div");
     card.className = "session-card";
+    card.dataset.id = s.id;
+    card.tabIndex = 0;
+    card.setAttribute("role", "button");
+    card.setAttribute("aria-label", `Open ${s.name} in the editor`);
     const vidBadge = s.hasRecording
       ? `<span class="size-badge has-vid">${formatBytes(s.recordingBytes)}</span>`
       : `<span class="size-badge">no video</span>`;
@@ -540,6 +598,7 @@ async function loadSessions() {
           ${voiceBadge}
         </div>
       </div>
+      <span class="open-hint" aria-hidden="true">Open</span>
       <div class="overflow-wrap">
         <button class="overflow-btn" data-act="more" aria-label="More actions">${ICONS.moreHorizontal}</button>
         <div class="overflow-menu">
@@ -553,6 +612,12 @@ async function loadSessions() {
       if (e.target.closest("[data-act], .overflow-menu")) return;
       openSession(s.id);
     });
+    card.addEventListener("keydown", (e) => {
+      if (e.target !== card || (e.key !== "Enter" && e.key !== " ")) return;
+      e.preventDefault();
+      openSession(s.id);
+    });
+    card.querySelector('[data-act="more"]').setAttribute("aria-label", `More actions for ${s.name}`);
     const menu = card.querySelector(".overflow-menu");
     card.querySelector('[data-act="more"]').addEventListener("click", (e) => {
       e.stopPropagation();

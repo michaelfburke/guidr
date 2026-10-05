@@ -12,8 +12,7 @@ describes exactly what data the extension handles, where it lives, and where
 
 - Guidr has no server. The developer never sees your data.
 - Recordings live only in your browser, in extension-sandboxed storage.
-- Nothing leaves your browser until you click **Enrich** or **Generate
-  script**. Then the relevant step data is sent to the AI provider you
+- Nothing leaves your browser until you click **Rewrite with AI**. Then the relevant step data is sent to the AI provider you
   selected, using the API key you provided.
 - Your API key is stored locally and only ever sent to that provider.
 - Uninstalling the extension or clicking **Clear all Guidr data** deletes
@@ -28,10 +27,11 @@ Only while you are actively recording a guide, and only after you start it:
   records a video of whatever you pick until you stop. Anything visible in
   the shared area is in the video, including text you type into forms.
   Choose a single tab and close anything sensitive before recording.
-- **Microphone narration.** When you start a recording, Guidr asks Chrome
-  for microphone access. If you allow it, your narration is recorded
-  alongside the video until you stop. If you deny access or have no
-  microphone, the recording continues without audio.
+- **Microphone narration (off unless you turn it on).** Narration is
+  recorded only after you allow the microphone in Settings and switch on
+  **Record voice narration** in the side panel. Then your voice is recorded
+  alongside the video until you stop. With it off, Guidr never opens the
+  microphone.
 - **Click details.** For each click (or keyboard activation of a button or
   link) in the recorded tab: the element's tag, id, CSS classes, visible
   text, ARIA label and role, placeholder, input type and name, link URL,
@@ -65,7 +65,7 @@ recordings.
 Guidr makes network requests only for the actions below, directly from your
 browser. It does not proxy or observe them.
 
-**When you click Enrich on a step**, Guidr sends to your chosen AI provider:
+**When you click Rewrite with AI on a step** (or Rewrite all), Guidr sends to your chosen AI provider:
 
 - One still frame from the screen recording, taken at the moment of the click.
 - A summary of that step's click details (element type, text, label, role)
